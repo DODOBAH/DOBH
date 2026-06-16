@@ -1,0 +1,212 @@
+.iadal-members-wrap {
+	max-width: 1280px;
+}
+
+.iadal-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+	margin: 18px 0;
+	padding: 20px;
+}
+
+.iadal-filters {
+	align-items: end;
+	display: grid;
+	gap: 16px;
+	grid-template-columns: repeat(4, minmax(160px, 1fr)) auto;
+}
+
+.iadal-filters label,
+.iadal-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.iadal-filters span,
+.iadal-field span {
+	color: #1d2327;
+	font-weight: 600;
+}
+
+.iadal-filters input,
+.iadal-filters select,
+.iadal-field input,
+.iadal-field select,
+.iadal-field textarea {
+	border-radius: 8px;
+	max-width: 100%;
+	min-height: 38px;
+	width: 100%;
+}
+
+.iadal-filter-actions,
+.iadal-form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.iadal-table-header {
+	align-items: center;
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 12px;
+}
+
+.iadal-members-table th:first-child {
+	width: 72px;
+}
+
+.iadal-member-avatar,
+.iadal-photo-preview {
+	background: #f0f6fc;
+	border: 1px solid #c3c4c7;
+	border-radius: 50%;
+	display: inline-block;
+	height: 48px;
+	object-fit: cover;
+	width: 48px;
+}
+
+.iadal-photo-preview {
+	border-radius: 14px;
+	display: none;
+	height: 140px;
+	width: 140px;
+}
+
+.iadal-photo-preview.is-visible,
+.iadal-photo-preview[src] {
+	display: block;
+}
+
+.iadal-member-avatar-empty::before {
+	color: #2271b1;
+	content: "\f307";
+	display: block;
+	font-family: dashicons;
+	font-size: 28px;
+	line-height: 48px;
+	text-align: center;
+}
+
+.iadal-status {
+	border-radius: 999px;
+	display: inline-block;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 4px 10px;
+}
+
+.iadal-status-ativo {
+	background: #edfaef;
+	color: #0a7a22;
+}
+
+.iadal-status-inativo {
+	background: #f0f0f1;
+	color: #50575e;
+}
+
+.iadal-inline-form {
+	display: inline-block;
+	margin-left: 6px;
+}
+
+.iadal-form-grid {
+	display: grid;
+	gap: 18px;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.iadal-form-grid .iadal-card {
+	margin: 0;
+}
+
+.iadal-field-wide {
+	grid-column: 1 / -1;
+}
+
+.iadal-field small {
+	color: #646970;
+}
+
+.iadal-form-actions {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 12px;
+	margin-top: 18px;
+	padding: 16px;
+}
+
+.iadal-report-header {
+	border-bottom: 1px solid #dcdcde;
+	margin-bottom: 16px;
+	padding-bottom: 12px;
+	text-align: center;
+}
+
+@media (max-width: 960px) {
+	.iadal-filters,
+	.iadal-form-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 782px) {
+	.iadal-members-table thead {
+		display: none;
+	}
+
+	.iadal-members-table,
+	.iadal-members-table tbody,
+	.iadal-members-table tr,
+	.iadal-members-table td {
+		display: block;
+		width: 100%;
+	}
+
+	.iadal-members-table tr {
+		border-bottom: 1px solid #dcdcde;
+		padding: 12px 0;
+	}
+
+	.iadal-members-table td {
+		border: 0;
+		box-sizing: border-box;
+		padding-left: 42%;
+		position: relative;
+	}
+
+	.iadal-members-table td::before {
+		content: attr(data-label);
+		font-weight: 700;
+		left: 10px;
+		position: absolute;
+		top: 8px;
+		width: 36%;
+	}
+}
+
+@media print {
+	#adminmenumain,
+	#wpadminbar,
+	.iadal-print-hidden,
+	.page-title-action,
+	.notice,
+	.update-nag {
+		display: none !important;
+	}
+
+	#wpcontent {
+		margin-left: 0 !important;
+	}
+
+	.iadal-card {
+		border: 0;
+		box-shadow: none;
+	}
+}
