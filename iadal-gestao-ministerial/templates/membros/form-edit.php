@@ -12,8 +12,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 $status_options     = IADAL_Members_Controller::status_options();
 $entry_type_options = IADAL_Members_Controller::entry_type_options();
 $photo_url          = ! empty( $member['photo_attachment_id'] ) ? wp_get_attachment_image_url( (int) $member['photo_attachment_id'], 'medium' ) : '';
-$change_letter_url  = ! empty( $member['change_letter_attachment_id'] ) ? wp_get_attachment_url( (int) $member['change_letter_attachment_id'] ) : '';
-$acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? wp_get_attachment_url( (int) $member['acclamation_letter_attachment_id'] ) : '';
+$change_letter_url  = ! empty( $change_letter['id'] ) ? wp_nonce_url(
+	add_query_arg(
+		array(
+			'action'      => 'iadal_members_document_download',
+			'document_id' => (int) $change_letter['id'],
+		),
+		admin_url( 'admin-post.php' )
+	),
+	'iadal_members_document_download_' . (int) $change_letter['id']
+) : '';
+$acclamation_url    = ! empty( $acclamation_letter['id'] ) ? wp_nonce_url(
+	add_query_arg(
+		array(
+			'action'      => 'iadal_members_document_download',
+			'document_id' => (int) $acclamation_letter['id'],
+		),
+		admin_url( 'admin-post.php' )
+	),
+	'iadal_members_document_download_' . (int) $acclamation_letter['id']
+) : '';
 ?>
 
 <div class="wrap iadal-members-wrap">
@@ -51,7 +69,7 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Nome completo', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
-					<input type="text" name="full_name" required maxlength="190" value="<?php echo esc_attr( $member['full_name'] ); ?>" />
+					<input type="text" name="full_name" required maxlength="190" value="<?php echo esc_attr( $member['full_name'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
@@ -62,25 +80,25 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Telefone', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="phone" maxlength="30" value="<?php echo esc_attr( $member['phone'] ); ?>" />
+					<input type="text" name="phone" maxlength="30" value="<?php echo esc_attr( $member['phone'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'E-mail', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="email" name="email" maxlength="190" value="<?php echo esc_attr( $member['email'] ); ?>" />
+					<input type="email" name="email" maxlength="190" value="<?php echo esc_attr( $member['email'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Data de nascimento', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="date" name="birth_date" value="<?php echo esc_attr( $member['birth_date'] ); ?>" />
+					<input type="date" name="birth_date" value="<?php echo esc_attr( $member['birth_date'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Sexo', 'iadal-gestao-ministerial' ); ?></span>
 					<select name="gender">
 						<option value=""><?php esc_html_e( 'Selecione', 'iadal-gestao-ministerial' ); ?></option>
-						<option value="Masculino" <?php selected( $member['gender'], 'Masculino' ); ?>><?php esc_html_e( 'Masculino', 'iadal-gestao-ministerial' ); ?></option>
-						<option value="Feminino" <?php selected( $member['gender'], 'Feminino' ); ?>><?php esc_html_e( 'Feminino', 'iadal-gestao-ministerial' ); ?></option>
+						<option value="Masculino" <?php selected( $member['gender'] ?? '', 'Masculino' ); ?>><?php esc_html_e( 'Masculino', 'iadal-gestao-ministerial' ); ?></option>
+						<option value="Feminino" <?php selected( $member['gender'] ?? '', 'Feminino' ); ?>><?php esc_html_e( 'Feminino', 'iadal-gestao-ministerial' ); ?></option>
 					</select>
 				</label>
 			</section>
@@ -90,37 +108,37 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'CEP', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="zip_code" maxlength="20" value="<?php echo esc_attr( $member['zip_code'] ); ?>" />
+					<input type="text" name="zip_code" maxlength="20" value="<?php echo esc_attr( $member['zip_code'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field iadal-field-wide">
 					<span><?php esc_html_e( 'Endereco', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="address" maxlength="255" value="<?php echo esc_attr( $member['address'] ); ?>" />
+					<input type="text" name="address" maxlength="255" value="<?php echo esc_attr( $member['address'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Numero', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="address_number" maxlength="30" value="<?php echo esc_attr( $member['address_number'] ); ?>" />
+					<input type="text" name="address_number" maxlength="30" value="<?php echo esc_attr( $member['address_number'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Complemento', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="address_complement" maxlength="120" value="<?php echo esc_attr( $member['address_complement'] ); ?>" />
+					<input type="text" name="address_complement" maxlength="120" value="<?php echo esc_attr( $member['address_complement'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Bairro', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="district" maxlength="120" value="<?php echo esc_attr( $member['district'] ); ?>" />
+					<input type="text" name="district" maxlength="120" value="<?php echo esc_attr( $member['district'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Cidade', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="city" maxlength="120" value="<?php echo esc_attr( $member['city'] ); ?>" />
+					<input type="text" name="city" maxlength="120" value="<?php echo esc_attr( $member['city'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'UF', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="state" maxlength="2" value="<?php echo esc_attr( $member['state'] ); ?>" />
+					<input type="text" name="state" maxlength="2" value="<?php echo esc_attr( $member['state'] ?? '' ); ?>" />
 				</label>
 			</section>
 
@@ -129,19 +147,19 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Estado civil', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="marital_status" maxlength="40" value="<?php echo esc_attr( $member['marital_status'] ); ?>" />
+					<input type="text" name="marital_status" maxlength="40" value="<?php echo esc_attr( $member['marital_status'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Conjuge', 'iadal-gestao-ministerial' ); ?></span>
-					<input type="text" name="spouse_name" maxlength="190" value="<?php echo esc_attr( $member['spouse_name'] ); ?>" />
+					<input type="text" name="spouse_name" maxlength="190" value="<?php echo esc_attr( $member['spouse_name'] ?? '' ); ?>" />
 				</label>
 
 				<label class="iadal-field">
 					<span><?php esc_html_e( 'Tipo de entrada', 'iadal-gestao-ministerial' ); ?></span>
 					<select name="entry_type" data-iadal-entry-type>
 						<?php foreach ( $entry_type_options as $value => $label ) : ?>
-							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $member['entry_type'], $value ); ?>>
+							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $member['entry_type'] ?? '', $value ); ?>>
 								<?php echo esc_html( $label ); ?>
 							</option>
 						<?php endforeach; ?>
@@ -153,7 +171,7 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 					<span><?php esc_html_e( 'Status', 'iadal-gestao-ministerial' ); ?></span>
 					<select name="status">
 						<?php foreach ( $status_options as $value => $label ) : ?>
-							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $member['status'], $value ); ?>>
+							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $member['status'] ?? '', $value ); ?>>
 								<?php echo esc_html( $label ); ?>
 							</option>
 						<?php endforeach; ?>
@@ -182,7 +200,7 @@ $acclamation_url    = ! empty( $member['acclamation_letter_attachment_id'] ) ? w
 
 				<label class="iadal-field iadal-field-wide">
 					<span><?php esc_html_e( 'Observacoes', 'iadal-gestao-ministerial' ); ?></span>
-					<textarea name="notes" rows="5"><?php echo esc_textarea( $member['notes'] ); ?></textarea>
+					<textarea name="notes" rows="5"><?php echo esc_textarea( $member['notes'] ?? '' ); ?></textarea>
 				</label>
 			</section>
 		</div>

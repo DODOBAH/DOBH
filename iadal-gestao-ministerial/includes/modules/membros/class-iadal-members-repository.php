@@ -22,10 +22,18 @@ class IADAL_Members_Repository {
 	private string $table;
 
 	/**
+	 * Member documents table name.
+	 *
+	 * @var string
+	 */
+	private string $documents_table;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->table = IADAL_Database::table( 'members' );
+		$this->table           = IADAL_Database::table( 'members' );
+		$this->documents_table = IADAL_Database::table( 'member_documents' );
 	}
 
 	/**
@@ -73,7 +81,7 @@ class IADAL_Members_Repository {
 		}
 
 		if ( '' !== $args['birth_month'] ) {
-			$where[]  = 'MONTH(birth_date) = %d';
+			$where[]  = 'birth_month = %d';
 			$values[] = (int) $args['birth_month'];
 		}
 
@@ -81,7 +89,8 @@ class IADAL_Members_Repository {
 		$values[]  = max( 1, (int) $args['limit'] );
 		$values[]  = max( 0, (int) $args['offset'] );
 
-		$sql = "SELECT * FROM {$this->table} {$where_sql} ORDER BY full_name ASC LIMIT %d OFFSET %d";
+		$fields = 'id, photo_attachment_id, full_name, cpf, phone, email, birth_date, entry_type, status';
+		$sql    = "SELECT {$fields} FROM {$this->table} {$where_sql} ORDER BY full_name ASC LIMIT %d OFFSET %d";
 
 		return $wpdb->get_results( $wpdb->prepare( $sql, $values ), ARRAY_A );
 	}
@@ -129,7 +138,7 @@ class IADAL_Members_Repository {
 		}
 
 		if ( '' !== $args['birth_month'] ) {
-			$where[]  = 'MONTH(birth_date) = %d';
+			$where[]  = 'birth_month = %d';
 			$values[] = (int) $args['birth_month'];
 		}
 
@@ -172,9 +181,8 @@ class IADAL_Members_Repository {
 		$data['updated_at']     = $now;
 		$data['created_by']     = get_current_user_id();
 		$data['updated_by']     = get_current_user_id();
+		$data['birth_month']    = $this->get_birth_month( $data['birth_date'] ?? '' );
 		$data['photo_attachment_id'] = ! empty( $data['photo_attachment_id'] ) ? (int) $data['photo_attachment_id'] : null;
-		$data['change_letter_attachment_id'] = ! empty( $data['change_letter_attachment_id'] ) ? (int) $data['change_letter_attachment_id'] : null;
-		$data['acclamation_letter_attachment_id'] = ! empty( $data['acclamation_letter_attachment_id'] ) ? (int) $data['acclamation_letter_attachment_id'] : null;
 
 		$result = $wpdb->insert( $this->table, $data, $this->formats( $data ) );
 
@@ -197,17 +205,10 @@ class IADAL_Members_Repository {
 
 		$data['updated_at'] = IADAL_Database::now();
 		$data['updated_by'] = get_current_user_id();
+		$data['birth_month'] = $this->get_birth_month( $data['birth_date'] ?? '' );
 
 		if ( array_key_exists( 'photo_attachment_id', $data ) ) {
 			$data['photo_attachment_id'] = ! empty( $data['photo_attachment_id'] ) ? (int) $data['photo_attachment_id'] : null;
-		}
-
-		if ( array_key_exists( 'change_letter_attachment_id', $data ) ) {
-			$data['change_letter_attachment_id'] = ! empty( $data['change_letter_attachment_id'] ) ? (int) $data['change_letter_attachment_id'] : null;
-		}
-
-		if ( array_key_exists( 'acclamation_letter_attachment_id', $data ) ) {
-			$data['acclamation_letter_attachment_id'] = ! empty( $data['acclamation_letter_attachment_id'] ) ? (int) $data['acclamation_letter_attachment_id'] : null;
 		}
 
 		$result = $wpdb->update(
@@ -255,12 +256,12 @@ class IADAL_Members_Repository {
 		global $wpdb;
 
 		if ( $ignore_id > 0 ) {
-			$sql = "SELECT id FROM {$this->table} WHERE cpf = %s AND id <> %d AND deleted_at IS NULL LIMIT 1";
+			$sql = "SELECT id FROM {$this->table} WHERE cpf = %s AND id <> %d LIMIT 1";
 
 			return null !== $wpdb->get_var( $wpdb->prepare( $sql, $cpf, $ignore_id ) );
 		}
 
-		$sql = "SELECT id FROM {$this->table} WHERE cpf = %s AND deleted_at IS NULL LIMIT 1";
+		$sql = "SELECT id FROM {$this->table} WHERE cpf = %s LIMIT 1";
 
 		return null !== $wpdb->get_var( $wpdb->prepare( $sql, $cpf ) );
 	}
@@ -269,16 +270,101 @@ class IADAL_Members_Repository {
 	 * Lists birthday members for a month.
 	 *
 	 * @param int $month Month number.
+	 * @param int $limit Results limit.
+	 * @param int $offset Results offset.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function birthdays( int $month ): array {
+	public function birthdays( int $month, int $limit = 50, int $offset = 0 ): array {
 		return $this->all(
 			array(
 				'birth_month' => $month,
 				'status'      => 'ativo',
-				'limit'       => 500,
+				'limit'       => $limit,
+				'offset'      => $offset,
 			)
 		);
+	}
+
+	/**
+	 * Creates a protected member document record.
+	 *
+	 * @param int                  $member_id Member ID.
+	 * @param array<string, mixed> $document Sanitized document data.
+	 * @return int|false
+	 */
+	public function create_document( int $member_id, array $document ) {
+		global $wpdb;
+
+		$data = array(
+			'member_id'     => $member_id,
+			'document_type' => (string) $document['document_type'],
+			'title'         => (string) $document['title'],
+			'file_name'     => (string) $document['file_name'],
+			'file_path'     => (string) $document['file_path'],
+			'mime_type'     => (string) $document['mime_type'],
+			'file_size'     => (int) $document['file_size'],
+			'notes'         => isset( $document['notes'] ) ? (string) $document['notes'] : '',
+			'uploaded_by'   => get_current_user_id(),
+			'created_at'    => IADAL_Database::now(),
+		);
+
+		$result = $wpdb->insert(
+			$this->documents_table,
+			$data,
+			array( '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s' )
+		);
+
+		if ( false === $result ) {
+			return false;
+		}
+
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Checks whether a member has a protected document type.
+	 *
+	 * @param int    $member_id Member ID.
+	 * @param string $document_type Document type.
+	 * @return bool
+	 */
+	public function member_has_document_type( int $member_id, string $document_type ): bool {
+		global $wpdb;
+
+		$sql = "SELECT id FROM {$this->documents_table} WHERE member_id = %d AND document_type = %s AND deleted_at IS NULL LIMIT 1";
+
+		return null !== $wpdb->get_var( $wpdb->prepare( $sql, $member_id, $document_type ) );
+	}
+
+	/**
+	 * Finds one protected document.
+	 *
+	 * @param int $document_id Document ID.
+	 * @return array<string, mixed>|null
+	 */
+	public function find_document( int $document_id ): ?array {
+		global $wpdb;
+
+		$sql      = "SELECT * FROM {$this->documents_table} WHERE id = %d AND deleted_at IS NULL LIMIT 1";
+		$document = $wpdb->get_row( $wpdb->prepare( $sql, $document_id ), ARRAY_A );
+
+		return $document ?: null;
+	}
+
+	/**
+	 * Returns the latest document for a member and type.
+	 *
+	 * @param int    $member_id Member ID.
+	 * @param string $document_type Document type.
+	 * @return array<string, mixed>|null
+	 */
+	public function latest_document( int $member_id, string $document_type ): ?array {
+		global $wpdb;
+
+		$sql = "SELECT * FROM {$this->documents_table} WHERE member_id = %d AND document_type = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1";
+		$document = $wpdb->get_row( $wpdb->prepare( $sql, $member_id, $document_type ), ARRAY_A );
+
+		return $document ?: null;
 	}
 
 	/**
@@ -290,11 +376,10 @@ class IADAL_Members_Repository {
 	private function formats( array $data ): array {
 		$integer_fields = array(
 			'photo_attachment_id',
-			'change_letter_attachment_id',
-			'acclamation_letter_attachment_id',
 			'created_by',
 			'updated_by',
 			'deleted_by',
+			'birth_month',
 		);
 
 		$formats = array();
@@ -304,5 +389,25 @@ class IADAL_Members_Repository {
 		}
 
 		return $formats;
+	}
+
+	/**
+	 * Gets the birth month for indexing reports.
+	 *
+	 * @param mixed $birth_date Date value.
+	 * @return int|null
+	 */
+	private function get_birth_month( $birth_date ): ?int {
+		if ( empty( $birth_date ) || ! is_string( $birth_date ) ) {
+			return null;
+		}
+
+		$timestamp = strtotime( $birth_date );
+
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		return (int) gmdate( 'n', $timestamp );
 	}
 }

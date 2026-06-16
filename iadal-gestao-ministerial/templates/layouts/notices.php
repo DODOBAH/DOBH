@@ -9,8 +9,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$iadal_notice = filter_input( INPUT_GET, 'iadal_notice', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
-$iadal_error  = filter_input( INPUT_GET, 'iadal_error', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+$iadal_notice      = '';
+$iadal_error       = '';
+$iadal_message_key = filter_input( INPUT_GET, 'iadal_message', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+
+if ( $iadal_message_key ) {
+	$iadal_message = get_transient( 'iadal_message_' . $iadal_message_key );
+
+	if ( is_array( $iadal_message ) && (int) ( $iadal_message['current_user'] ?? 0 ) === get_current_user_id() ) {
+		$iadal_notice = isset( $iadal_message['notice'] ) ? (string) $iadal_message['notice'] : '';
+		$iadal_error  = isset( $iadal_message['error'] ) ? (string) $iadal_message['error'] : '';
+		delete_transient( 'iadal_message_' . $iadal_message_key );
+	}
+}
 ?>
 
 <?php if ( $iadal_notice ) : ?>

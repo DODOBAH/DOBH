@@ -33,6 +33,7 @@ class IADAL_Members_Schema {
 			phone varchar(30) DEFAULT NULL,
 			email varchar(190) DEFAULT NULL,
 			birth_date date DEFAULT NULL,
+			birth_month tinyint(2) unsigned DEFAULT NULL,
 			gender varchar(20) DEFAULT NULL,
 			zip_code varchar(20) DEFAULT NULL,
 			address varchar(255) DEFAULT NULL,
@@ -45,8 +46,6 @@ class IADAL_Members_Schema {
 			spouse_name varchar(190) DEFAULT NULL,
 			entry_type varchar(30) NOT NULL DEFAULT 'local',
 			status varchar(20) NOT NULL DEFAULT 'ativo',
-			change_letter_attachment_id bigint(20) unsigned DEFAULT NULL,
-			acclamation_letter_attachment_id bigint(20) unsigned DEFAULT NULL,
 			notes text DEFAULT NULL,
 			created_by bigint(20) unsigned DEFAULT NULL,
 			updated_by bigint(20) unsigned DEFAULT NULL,
@@ -60,6 +59,29 @@ class IADAL_Members_Schema {
 			KEY status (status),
 			KEY entry_type (entry_type),
 			KEY birth_date (birth_date),
+			KEY birth_month (birth_month),
+			KEY deleted_at (deleted_at)
+		) {$charset_collate};";
+
+		$documents_table = IADAL_Database::table( 'member_documents' );
+
+		$sql .= "\nCREATE TABLE {$documents_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			member_id bigint(20) unsigned NOT NULL,
+			document_type varchar(40) NOT NULL,
+			title varchar(190) NOT NULL,
+			file_name varchar(190) NOT NULL,
+			file_path text NOT NULL,
+			mime_type varchar(120) NOT NULL,
+			file_size bigint(20) unsigned NOT NULL DEFAULT 0,
+			notes text DEFAULT NULL,
+			uploaded_by bigint(20) unsigned DEFAULT NULL,
+			created_at datetime NOT NULL,
+			deleted_at datetime DEFAULT NULL,
+			deleted_by bigint(20) unsigned DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY member_id (member_id),
+			KEY document_type (document_type),
 			KEY deleted_at (deleted_at)
 		) {$charset_collate};";
 

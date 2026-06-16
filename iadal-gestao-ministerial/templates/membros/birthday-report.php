@@ -8,6 +8,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$total_pages = max( 1, (int) ceil( $total / $per_page ) );
 ?>
 
 <div class="wrap iadal-members-wrap">
@@ -94,5 +96,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php endforeach; ?>
 			</tbody>
 		</table>
+
+		<?php if ( $total_pages > 1 ) : ?>
+			<div class="tablenav iadal-print-hidden">
+				<div class="tablenav-pages">
+					<?php
+					echo wp_kses_post(
+						paginate_links(
+							array(
+								'base'      => add_query_arg( 'paged', '%#%' ),
+								'format'    => '',
+								'prev_text' => __( '&laquo;', 'iadal-gestao-ministerial' ),
+								'next_text' => __( '&raquo;', 'iadal-gestao-ministerial' ),
+								'total'     => $total_pages,
+								'current'   => $page,
+							)
+						)
+					);
+					?>
+				</div>
+			</div>
+		<?php endif; ?>
 	</div>
 </div>

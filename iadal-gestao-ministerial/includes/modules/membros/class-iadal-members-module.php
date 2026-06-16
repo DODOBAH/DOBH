@@ -35,10 +35,37 @@ class IADAL_Members_Module {
 	 * @return void
 	 */
 	public function run(): void {
+		$this->ensure_capabilities();
+
 		add_action( 'admin_menu', array( $this, 'register_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 
 		$this->controller->register_hooks();
+	}
+
+	/**
+	 * Ensures administrators can access the initial members module after updates.
+	 *
+	 * @return void
+	 */
+	private function ensure_capabilities(): void {
+		$administrator = get_role( 'administrator' );
+
+		if ( ! $administrator ) {
+			return;
+		}
+
+		$capabilities = array(
+			'iadal_view_members',
+			'iadal_create_members',
+			'iadal_edit_members',
+			'iadal_delete_members',
+			'iadal_manage_members',
+		);
+
+		foreach ( $capabilities as $capability ) {
+			$administrator->add_cap( $capability );
+		}
 	}
 
 	/**
@@ -50,7 +77,7 @@ class IADAL_Members_Module {
 		add_menu_page(
 			__( 'IADAL - Membros', 'iadal-gestao-ministerial' ),
 			__( 'IADAL Membros', 'iadal-gestao-ministerial' ),
-			'manage_options',
+			'iadal_view_members',
 			'iadal-members',
 			array( $this->controller, 'render_list_page' ),
 			'dashicons-groups',
@@ -61,7 +88,7 @@ class IADAL_Members_Module {
 			'iadal-members',
 			__( 'Cadastrar Membro', 'iadal-gestao-ministerial' ),
 			__( 'Cadastrar Membro', 'iadal-gestao-ministerial' ),
-			'manage_options',
+			'iadal_create_members',
 			'iadal-members-create',
 			array( $this->controller, 'render_create_page' )
 		);
@@ -70,7 +97,7 @@ class IADAL_Members_Module {
 			'iadal-members',
 			__( 'Aniversariantes', 'iadal-gestao-ministerial' ),
 			__( 'Aniversariantes', 'iadal-gestao-ministerial' ),
-			'manage_options',
+			'iadal_view_members',
 			'iadal-members-birthdays',
 			array( $this->controller, 'render_birthdays_page' )
 		);
@@ -79,7 +106,7 @@ class IADAL_Members_Module {
 			null,
 			__( 'Editar Membro', 'iadal-gestao-ministerial' ),
 			__( 'Editar Membro', 'iadal-gestao-ministerial' ),
-			'manage_options',
+			'iadal_edit_members',
 			'iadal-members-edit',
 			array( $this->controller, 'render_edit_page' )
 		);
