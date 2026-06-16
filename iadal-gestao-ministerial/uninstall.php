@@ -22,6 +22,9 @@ global $wpdb;
 
 $tables = array(
 	$wpdb->prefix . 'iadal_audit_logs',
+	$wpdb->prefix . 'iadal_department_users',
+	$wpdb->prefix . 'iadal_departments',
+	$wpdb->prefix . 'iadal_department_library',
 	$wpdb->prefix . 'iadal_member_documents',
 	$wpdb->prefix . 'iadal_members',
 	$wpdb->prefix . 'iadal_users',
@@ -38,6 +41,7 @@ delete_option( 'iadal_delete_data_on_uninstall' );
 delete_option( 'iadal_gestao_upgrade_error' );
 delete_option( 'iadal_members_capabilities_version' );
 delete_option( 'iadal_congregations_capabilities_version' );
+delete_option( 'iadal_departments_capabilities_version' );
 
 $protected_roots = array(
 	trailingslashit( dirname( untrailingslashit( ABSPATH ) ) ) . 'iadal-protected/member-documents',

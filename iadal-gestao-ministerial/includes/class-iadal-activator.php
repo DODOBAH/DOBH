@@ -24,9 +24,12 @@ class IADAL_Activator {
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-audit-schema.php';
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-members-schema.php';
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-congregations-schema.php';
+		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-departments-schema.php';
 
 		IADAL_Members_Schema::create();
 		IADAL_Congregations_Schema::create();
+		IADAL_Departments_Schema::create();
+		IADAL_Departments_Schema::seed_official_library();
 		IADAL_Audit_Schema::create();
 		self::add_capabilities();
 
@@ -61,6 +64,13 @@ class IADAL_Activator {
 			'iadal_block_congregations',
 			'iadal_manage_congregation_credentials',
 			'iadal_manage_congregations',
+			'iadal_view_departments',
+			'iadal_activate_departments',
+			'iadal_edit_departments',
+			'iadal_delete_departments',
+			'iadal_create_custom_departments',
+			'iadal_manage_department_components',
+			'iadal_manage_departments',
 		);
 
 		foreach ( $capabilities as $capability ) {
@@ -69,5 +79,6 @@ class IADAL_Activator {
 
 		update_option( 'iadal_members_capabilities_version', IADAL_GESTAO_VERSION );
 		update_option( 'iadal_congregations_capabilities_version', IADAL_GESTAO_VERSION );
+		update_option( 'iadal_departments_capabilities_version', IADAL_GESTAO_VERSION );
 	}
 }

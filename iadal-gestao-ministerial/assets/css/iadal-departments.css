@@ -1,0 +1,40 @@
+.iadal-departments-wrap {
+	max-width: 1280px;
+}
+
+.iadal-departments-wrap code {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	padding: 3px 6px;
+}
+
+.iadal-departments-wrap .iadal-checkbox {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.iadal-departments-wrap .iadal-checkbox input {
+	min-height: auto;
+	width: auto;
+}
+
+.iadal-credentials-grid {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.iadal-credential-card {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 12px;
+	padding: 16px;
+}
+
+.iadal-status-bloqueado {
+	background: #fcf0f1;
+	color: #b32d2e;
+}

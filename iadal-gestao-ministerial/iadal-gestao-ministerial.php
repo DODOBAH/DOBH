@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: IADAL Gestao Ministerial
- * Description: Sistema Integrado IADAL Alto Lage - modulos iniciais de congregacoes e membros.
- * Version: 0.3.0
+ * Description: Sistema Integrado IADAL Alto Lage - modulos iniciais de congregacoes, membros e departamentos.
+ * Version: 0.4.0
  * Requires PHP: 8.0
  * Author: IADAL Alto Lage
  * Text Domain: iadal-gestao-ministerial
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'IADAL_GESTAO_VERSION', '0.3.0' );
+define( 'IADAL_GESTAO_VERSION', '0.4.0' );
 define( 'IADAL_GESTAO_FILE', __FILE__ );
 define( 'IADAL_GESTAO_DIR', plugin_dir_path( __FILE__ ) );
 define( 'IADAL_GESTAO_URL', plugin_dir_url( __FILE__ ) );
@@ -25,12 +25,16 @@ require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-database.php';
 require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-audit-schema.php';
 require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-members-schema.php';
 require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-congregations-schema.php';
+require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-departments-schema.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/membros/class-iadal-members-repository.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/membros/class-iadal-members-controller.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/membros/class-iadal-members-module.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/congregacoes/class-iadal-congregations-repository.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/congregacoes/class-iadal-congregations-controller.php';
 require_once IADAL_GESTAO_DIR . 'includes/modules/congregacoes/class-iadal-congregations-module.php';
+require_once IADAL_GESTAO_DIR . 'includes/modules/departamentos/class-iadal-departments-repository.php';
+require_once IADAL_GESTAO_DIR . 'includes/modules/departamentos/class-iadal-departments-controller.php';
+require_once IADAL_GESTAO_DIR . 'includes/modules/departamentos/class-iadal-departments-module.php';
 
 register_activation_hook( __FILE__, array( 'IADAL_Activator', 'activate' ) );
 
@@ -51,6 +55,9 @@ function iadal_gestao_ministerial_boot(): void {
 
 	$congregations_module = new IADAL_Congregations_Module();
 	$congregations_module->run();
+
+	$departments_module = new IADAL_Departments_Module();
+	$departments_module->run();
 }
 
 add_action( 'plugins_loaded', 'iadal_gestao_ministerial_boot' );
@@ -69,6 +76,8 @@ function iadal_gestao_ministerial_maybe_upgrade(): void {
 
 	IADAL_Members_Schema::create();
 	IADAL_Congregations_Schema::create();
+	IADAL_Departments_Schema::create();
+	IADAL_Departments_Schema::seed_official_library();
 	IADAL_Audit_Schema::create();
 
 	if ( iadal_gestao_ministerial_required_schema_valid() ) {
@@ -93,6 +102,9 @@ function iadal_gestao_ministerial_required_tables_exist(): bool {
 			IADAL_Database::table( 'churches' ),
 			IADAL_Database::table( 'users' ),
 			IADAL_Database::table( 'church_modules' ),
+			IADAL_Database::table( 'department_library' ),
+			IADAL_Database::table( 'departments' ),
+			IADAL_Database::table( 'department_users' ),
 			IADAL_Database::table( 'audit_logs' ),
 		)
 	);
@@ -114,6 +126,9 @@ function iadal_gestao_ministerial_required_schema_valid(): bool {
 		IADAL_Database::table( 'churches' )         => array( 'id', 'name', 'pastor_user_id', 'secretary_user_id' ),
 		IADAL_Database::table( 'users' )            => array( 'id', 'login', 'password_hash', 'password_generated_at', 'blocked_by_church_status' ),
 		IADAL_Database::table( 'church_modules' )   => array( 'id', 'church_id', 'module_key', 'status' ),
+		IADAL_Database::table( 'department_library' ) => array( 'id', 'name', 'slug', 'type' ),
+		IADAL_Database::table( 'departments' )      => array( 'id', 'church_id', 'library_id', 'leader_user_id' ),
+		IADAL_Database::table( 'department_users' ) => array( 'id', 'department_id', 'church_id', 'name' ),
 		IADAL_Database::table( 'audit_logs' )       => array( 'id', 'module', 'action', 'entity_type' ),
 	);
 
