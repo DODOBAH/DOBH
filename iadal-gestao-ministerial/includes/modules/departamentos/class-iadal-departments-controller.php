@@ -37,10 +37,15 @@ class IADAL_Departments_Controller {
 	 */
 	public function register_hooks(): void {
 		add_action( 'admin_post_iadal_departments_library_create', array( $this, 'handle_library_create' ) );
+		add_action( 'admin_post_iadal_departments_library_update', array( $this, 'handle_library_update' ) );
+		add_action( 'admin_post_iadal_departments_library_delete', array( $this, 'handle_library_delete' ) );
 		add_action( 'admin_post_iadal_departments_activate', array( $this, 'handle_activate' ) );
 		add_action( 'admin_post_iadal_departments_update', array( $this, 'handle_update' ) );
 		add_action( 'admin_post_iadal_departments_delete', array( $this, 'handle_delete' ) );
 		add_action( 'admin_post_iadal_departments_component_create', array( $this, 'handle_component_create' ) );
+		add_action( 'admin_post_iadal_departments_component_update', array( $this, 'handle_component_update' ) );
+		add_action( 'admin_post_iadal_departments_component_delete', array( $this, 'handle_component_delete' ) );
+		add_action( 'admin_post_iadal_departments_component_reset_password', array( $this, 'handle_component_reset_password' ) );
 	}
 
 	/**
@@ -52,6 +57,11 @@ class IADAL_Departments_Controller {
 		$this->require_capability( 'iadal_view_departments' );
 
 		$filters  = $this->get_filters();
+
+		if ( ! empty( $filters['church_id'] ) && ! $this->can_access_church( (int) $filters['church_id'] ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar esta congregacao.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$page     = max( 1, $this->get_int_from_query( 'paged', 1 ) );
 		$per_page = 20;
 		$offset   = ( $page - 1 ) * $per_page;
@@ -105,6 +115,30 @@ class IADAL_Departments_Controller {
 	}
 
 	/**
+	 * Renders custom department edit page.
+	 *
+	 * @return void
+	 */
+	public function render_edit_library_page(): void {
+		$this->require_capability( 'iadal_create_custom_departments' );
+
+		$library_id = $this->get_int_from_query( 'library_id', 0 );
+		$library    = $this->repository->find_library( $library_id );
+
+		if ( ! $library || 'personalizado' !== $library['type'] ) {
+			wp_die( esc_html__( 'Departamento personalizado nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$this->include_template(
+			'departamentos/form-custom.php',
+			array(
+				'library_item' => $library,
+				'is_edit'      => true,
+			)
+		);
+	}
+
+	/**
 	 * Renders department activation page.
 	 *
 	 * @return void
@@ -136,6 +170,10 @@ class IADAL_Departments_Controller {
 			wp_die( esc_html__( 'Departamento nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		if ( ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar este departamento.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$this->include_template(
 			'departamentos/form-edit.php',
 			array(
@@ -160,6 +198,10 @@ class IADAL_Departments_Controller {
 			wp_die( esc_html__( 'Departamento nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		if ( ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar este departamento.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$credential_key = filter_input( INPUT_GET, 'credential_key', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 
 		$this->include_template(
@@ -167,6 +209,7 @@ class IADAL_Departments_Controller {
 			array(
 				'department'  => $department,
 				'components'  => $this->repository->components( $department_id ),
+				'members'     => $this->get_members_for_church( (int) $department['church_id'] ),
 				'credentials' => $this->get_credentials_transient( (string) $credential_key, $department_id ),
 			)
 		);
@@ -204,6 +247,73 @@ class IADAL_Departments_Controller {
 	}
 
 	/**
+	 * Handles custom library department update.
+	 *
+	 * @return void
+	 */
+	public function handle_library_update(): void {
+		$this->require_capability( 'iadal_create_custom_departments' );
+
+		$library_id = $this->get_int_from_post( 'library_id', 0 );
+		$this->verify_nonce( 'iadal_departments_library_update_' . $library_id, 'iadal_departments_nonce' );
+
+		$existing = $this->repository->find_library( $library_id );
+
+		if ( ! $existing || 'personalizado' !== $existing['type'] ) {
+			wp_die( esc_html__( 'Departamento personalizado nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$data   = $this->sanitize_library_data();
+		$errors = $this->validate_library_data( $data );
+
+		if ( $this->repository->library_slug_exists( $data['slug'], $library_id ) ) {
+			$errors[] = __( 'Ja existe um departamento com este identificador.', 'iadal-gestao-ministerial' );
+		}
+
+		if ( $errors ) {
+			$this->redirect( 'iadal-departments-library-edit', array( 'library_id' => $library_id, 'iadal_error' => implode( ' ', $errors ) ) );
+		}
+
+		$updated = $this->repository->update_library( $library_id, $data );
+
+		if ( ! $updated ) {
+			$this->redirect( 'iadal-departments-library-edit', array( 'library_id' => $library_id, 'iadal_error' => __( 'Nao foi possivel atualizar o departamento personalizado.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		IADAL_Audit::log( 'departments', 'update_library', 'department_library', $library_id, $existing, $data, null );
+
+		$this->redirect( 'iadal-departments-library', array( 'iadal_notice' => __( 'Departamento personalizado atualizado com sucesso.', 'iadal-gestao-ministerial' ) ) );
+	}
+
+	/**
+	 * Handles custom library department soft deletion.
+	 *
+	 * @return void
+	 */
+	public function handle_library_delete(): void {
+		$this->require_capability( 'iadal_create_custom_departments' );
+
+		$library_id = $this->get_int_from_post( 'library_id', 0 );
+		$this->verify_nonce( 'iadal_departments_library_delete_' . $library_id, 'iadal_departments_nonce' );
+
+		$existing = $this->repository->find_library( $library_id );
+
+		if ( ! $existing || 'personalizado' !== $existing['type'] ) {
+			wp_die( esc_html__( 'Departamento personalizado nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$deleted = $this->repository->delete_library( $library_id );
+
+		if ( ! $deleted ) {
+			$this->redirect( 'iadal-departments-library', array( 'iadal_error' => __( 'Nao foi possivel inativar o departamento personalizado.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		IADAL_Audit::log( 'departments', 'delete_library', 'department_library', $library_id, $existing, array( 'deleted' => true ), null );
+
+		$this->redirect( 'iadal-departments-library', array( 'iadal_notice' => __( 'Departamento personalizado inativado com sucesso.', 'iadal-gestao-ministerial' ) ) );
+	}
+
+	/**
 	 * Handles department activation for a congregation.
 	 *
 	 * @return void
@@ -215,9 +325,22 @@ class IADAL_Departments_Controller {
 		$data   = $this->sanitize_activation_data();
 		$errors = $this->validate_activation_data( $data );
 		$library = $this->repository->find_library( (int) $data['library_id'] );
+		$church  = $this->repository->find_church( (int) $data['church_id'] );
 
 		if ( ! $library ) {
 			$errors[] = __( 'Departamento da biblioteca nao encontrado.', 'iadal-gestao-ministerial' );
+		}
+
+		if ( $library && 'ativo' !== $library['status'] ) {
+			$errors[] = __( 'Este departamento da biblioteca nao esta ativo.', 'iadal-gestao-ministerial' );
+		}
+
+		if ( ! $church || 'ativo' !== $church['status'] ) {
+			$errors[] = __( 'A congregacao deve estar ativa para receber departamentos.', 'iadal-gestao-ministerial' );
+		}
+
+		if ( ! empty( $data['church_id'] ) && ! $this->can_access_church( (int) $data['church_id'] ) ) {
+			$errors[] = __( 'Voce nao tem permissao para ativar departamento nesta congregacao.', 'iadal-gestao-ministerial' );
 		}
 
 		if ( $library && $this->repository->department_exists( (int) $data['church_id'], (int) $data['library_id'] ) ) {
@@ -270,6 +393,12 @@ class IADAL_Departments_Controller {
 			$this->redirect( 'iadal-departments-activate', array( 'iadal_error' => __( 'Nao foi possivel vincular o usuario do lider ao departamento.', 'iadal-gestao-ministerial' ) ) );
 		}
 
+		$this->repository->update_church_module_status( (int) $data['church_id'], 'departamentos', 'ativo' );
+
+		if ( 'ebd' === (string) $library['slug'] ) {
+			$this->repository->update_church_module_status( (int) $data['church_id'], 'ebd', 'ativo' );
+		}
+
 		IADAL_Database::commit();
 
 		IADAL_Audit::log( 'departments', 'activate', 'department', (int) $department_id, null, $department_data, (int) $data['church_id'] );
@@ -313,6 +442,10 @@ class IADAL_Departments_Controller {
 			wp_die( esc_html__( 'Departamento nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		if ( ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para alterar este departamento.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$data   = $this->sanitize_department_update_data();
 		$errors = $this->validate_department_update_data( $data );
 
@@ -348,10 +481,22 @@ class IADAL_Departments_Controller {
 			wp_die( esc_html__( 'Departamento nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		if ( ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para excluir este departamento.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$deleted = $this->repository->delete_department( $department_id );
 
 		if ( ! $deleted ) {
 			$this->redirect( 'iadal-departments', array( 'iadal_error' => __( 'Nao foi possivel excluir o departamento.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		if ( 'ebd' === (string) $department['slug'] ) {
+			$this->repository->update_church_module_status( (int) $department['church_id'], 'ebd', 'disponivel' );
+		}
+
+		if ( 0 === $this->repository->count_departments( array( 'church_id' => (int) $department['church_id'], 'status' => 'ativo' ) ) ) {
+			$this->repository->update_church_module_status( (int) $department['church_id'], 'departamentos', 'disponivel' );
 		}
 
 		IADAL_Audit::log( 'departments', 'delete', 'department', $department_id, $department, array( 'deleted' => true ), (int) $department['church_id'] );
@@ -374,6 +519,10 @@ class IADAL_Departments_Controller {
 
 		if ( ! $department ) {
 			wp_die( esc_html__( 'Departamento nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		if ( ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para alterar componentes deste departamento.', 'iadal-gestao-ministerial' ) );
 		}
 
 		$data   = $this->sanitize_component_data( $department );
@@ -420,6 +569,151 @@ class IADAL_Departments_Controller {
 	}
 
 	/**
+	 * Handles component update.
+	 *
+	 * @return void
+	 */
+	public function handle_component_update(): void {
+		$this->require_capability( 'iadal_manage_department_components' );
+
+		$component_id = $this->get_int_from_post( 'component_id', 0 );
+		$this->verify_nonce( 'iadal_departments_component_update_' . $component_id, 'iadal_departments_nonce' );
+
+		$component = $this->repository->find_component( $component_id );
+
+		if ( ! $component ) {
+			wp_die( esc_html__( 'Componente nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$department = $this->repository->find_department( (int) $component['department_id'] );
+
+		if ( ! $department || ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para alterar este componente.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$data   = $this->sanitize_component_update_data();
+		$errors = $this->validate_component_data( array_merge( $component, $data ) );
+
+		if ( $errors ) {
+			$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_error' => implode( ' ', $errors ) ) );
+		}
+
+		$updated = $this->repository->update_component( $component_id, $data );
+
+		if ( ! $updated ) {
+			$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_error' => __( 'Nao foi possivel atualizar o componente.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		if ( ! empty( $component['user_id'] ) ) {
+			$this->repository->update_internal_user(
+				(int) $component['user_id'],
+				array(
+					'name'   => (string) $data['name'],
+					'phone'  => (string) $data['phone'],
+					'status' => (string) $data['status'],
+				)
+			);
+		}
+
+		IADAL_Audit::log( 'departments', 'update_component', 'department_user', $component_id, $component, $data, (int) $department['church_id'] );
+
+		$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_notice' => __( 'Componente atualizado com sucesso.', 'iadal-gestao-ministerial' ) ) );
+	}
+
+	/**
+	 * Handles component delete.
+	 *
+	 * @return void
+	 */
+	public function handle_component_delete(): void {
+		$this->require_capability( 'iadal_manage_department_components' );
+
+		$component_id = $this->get_int_from_post( 'component_id', 0 );
+		$this->verify_nonce( 'iadal_departments_component_delete_' . $component_id, 'iadal_departments_nonce' );
+
+		$component = $this->repository->find_component( $component_id );
+
+		if ( ! $component ) {
+			wp_die( esc_html__( 'Componente nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$department = $this->repository->find_department( (int) $component['department_id'] );
+
+		if ( ! $department || ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para excluir este componente.', 'iadal-gestao-ministerial' ) );
+		}
+
+		if ( ! empty( $component['is_leader'] ) ) {
+			$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_error' => __( 'O lider nao pode ser removido por esta tela.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		$deleted = $this->repository->delete_component( $component_id );
+
+		if ( ! $deleted ) {
+			$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_error' => __( 'Nao foi possivel excluir o componente.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		IADAL_Audit::log( 'departments', 'delete_component', 'department_user', $component_id, $component, array( 'deleted' => true ), (int) $department['church_id'] );
+
+		$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_notice' => __( 'Componente excluido com sucesso.', 'iadal-gestao-ministerial' ) ) );
+	}
+
+	/**
+	 * Handles component password reset.
+	 *
+	 * @return void
+	 */
+	public function handle_component_reset_password(): void {
+		$this->require_capability( 'iadal_manage_department_components' );
+
+		$component_id = $this->get_int_from_post( 'component_id', 0 );
+		$this->verify_nonce( 'iadal_departments_component_reset_password_' . $component_id, 'iadal_departments_nonce' );
+
+		$component = $this->repository->find_component( $component_id );
+
+		if ( ! $component || empty( $component['user_id'] ) ) {
+			wp_die( esc_html__( 'Usuario do componente nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$department = $this->repository->find_department( (int) $component['department_id'] );
+
+		if ( ! $department || ! $this->can_access_department( $department ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para redefinir a senha deste componente.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$password = wp_generate_password( 14, true, true );
+		$updated  = $this->repository->update_internal_user(
+			(int) $component['user_id'],
+			array(
+				'password_hash'         => wp_hash_password( $password ),
+				'password_generated_at' => IADAL_Database::now(),
+				'must_change_password'  => 1,
+				'status'                => (string) $component['status'],
+			)
+		);
+
+		if ( ! $updated ) {
+			$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'iadal_error' => __( 'Nao foi possivel redefinir a senha.', 'iadal-gestao-ministerial' ) ) );
+		}
+
+		$credential_key = $this->store_credentials_transient(
+			(int) $department['id'],
+			array(
+				array(
+					'name'     => (string) $component['name'],
+					'role'     => ! empty( $component['is_leader'] ) ? 'lider_departamento' : 'componente_departamento',
+					'login'    => $this->get_component_login( (int) $component['user_id'] ),
+					'password' => $password,
+				),
+			)
+		);
+
+		IADAL_Audit::log( 'departments', 'reset_component_password', 'department_user', $component_id, null, array( 'user_id' => (int) $component['user_id'] ), (int) $department['church_id'] );
+
+		$this->redirect( 'iadal-departments-components', array( 'department_id' => (int) $department['id'], 'credential_key' => $credential_key, 'iadal_notice' => __( 'Senha redefinida com sucesso. Guarde as credenciais exibidas agora.', 'iadal-gestao-ministerial' ) ) );
+	}
+
+	/**
 	 * Returns status options.
 	 *
 	 * @return array<string, string>
@@ -442,6 +736,35 @@ class IADAL_Departments_Controller {
 		if ( ! current_user_can( $capability ) && ! current_user_can( 'iadal_manage_departments' ) ) {
 			wp_die( esc_html__( 'Voce nao tem permissao para acessar esta area.', 'iadal-gestao-ministerial' ) );
 		}
+	}
+
+	/**
+	 * Checks if current user can access a church scope.
+	 *
+	 * @param int $church_id Church ID.
+	 * @return bool
+	 */
+	private function can_access_church( int $church_id ): bool {
+		if ( $church_id <= 0 ) {
+			return false;
+		}
+
+		if ( current_user_can( 'iadal_manage_departments' ) || current_user_can( 'iadal_view_congregations' ) ) {
+			return null !== $this->repository->find_church( $church_id );
+		}
+
+		// Future plugin-auth users should be checked here against their church_id.
+		return false;
+	}
+
+	/**
+	 * Checks if current user can access a department.
+	 *
+	 * @param array<string, mixed> $department Department data.
+	 * @return bool
+	 */
+	private function can_access_department( array $department ): bool {
+		return ! empty( $department['church_id'] ) && $this->can_access_church( (int) $department['church_id'] );
 	}
 
 	/**
@@ -548,15 +871,39 @@ class IADAL_Departments_Controller {
 	 */
 	private function sanitize_component_data( array $department ): array {
 		$post = wp_unslash( $_POST );
+		$member_id = isset( $post['member_id'] ) ? max( 0, (int) $post['member_id'] ) : 0;
+		$member    = $member_id > 0 ? $this->get_member_for_church( $member_id, (int) $department['church_id'] ) : null;
 
 		return array(
 			'department_id' => (int) $department['id'],
 			'church_id'     => (int) $department['church_id'],
-			'name'          => isset( $post['name'] ) ? sanitize_text_field( $post['name'] ) : '',
-			'phone'         => isset( $post['phone'] ) ? sanitize_text_field( $post['phone'] ) : '',
+			'member_id'     => $member_id,
+			'name'          => $member ? (string) $member['full_name'] : ( isset( $post['name'] ) ? sanitize_text_field( $post['name'] ) : '' ),
+			'phone'         => $member ? (string) $member['phone'] : ( isset( $post['phone'] ) ? sanitize_text_field( $post['phone'] ) : '' ),
 			'function_name' => isset( $post['function_name'] ) ? sanitize_text_field( $post['function_name'] ) : '',
 			'is_leader'     => 0,
 			'status'        => 'ativo',
+		);
+	}
+
+	/**
+	 * Sanitizes component update data.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function sanitize_component_update_data(): array {
+		$post   = wp_unslash( $_POST );
+		$status = isset( $post['status'] ) ? sanitize_key( $post['status'] ) : 'ativo';
+
+		if ( ! array_key_exists( $status, self::status_options() ) ) {
+			$status = 'ativo';
+		}
+
+		return array(
+			'name'          => isset( $post['name'] ) ? sanitize_text_field( $post['name'] ) : '',
+			'phone'         => isset( $post['phone'] ) ? sanitize_text_field( $post['phone'] ) : '',
+			'function_name' => isset( $post['function_name'] ) ? sanitize_text_field( $post['function_name'] ) : '',
+			'status'        => $status,
 		);
 	}
 
@@ -664,6 +1011,10 @@ class IADAL_Departments_Controller {
 
 		if ( '' === $data['name'] ) {
 			$errors[] = __( 'Informe o nome do componente.', 'iadal-gestao-ministerial' );
+		}
+
+		if ( ! empty( $data['member_id'] ) && ! $this->get_member_for_church( (int) $data['member_id'], (int) $data['church_id'] ) ) {
+			$errors[] = __( 'O membro selecionado nao pertence a congregacao do departamento.', 'iadal-gestao-ministerial' );
 		}
 
 		if ( strlen( (string) $data['name'] ) > 190 || strlen( (string) $data['phone'] ) > 30 || strlen( (string) $data['function_name'] ) > 120 ) {
@@ -803,6 +1154,50 @@ class IADAL_Departments_Controller {
 	}
 
 	/**
+	 * Gets members from one congregation for component linking.
+	 *
+	 * @param int $church_id Church ID.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function get_members_for_church( int $church_id ): array {
+		if ( ! class_exists( 'IADAL_Members_Repository' ) ) {
+			return array();
+		}
+
+		$repository = new IADAL_Members_Repository();
+
+		return $repository->all(
+			array(
+				'church_id' => $church_id,
+				'status'    => 'ativo',
+				'limit'     => 500,
+			)
+		);
+	}
+
+	/**
+	 * Gets one member and validates church ownership.
+	 *
+	 * @param int $member_id Member ID.
+	 * @param int $church_id Church ID.
+	 * @return array<string, mixed>|null
+	 */
+	private function get_member_for_church( int $member_id, int $church_id ): ?array {
+		if ( ! class_exists( 'IADAL_Members_Repository' ) ) {
+			return null;
+		}
+
+		$repository = new IADAL_Members_Repository();
+		$member     = $repository->find( $member_id );
+
+		if ( ! $member || (int) ( $member['church_id'] ?? 0 ) !== $church_id ) {
+			return null;
+		}
+
+		return $member;
+	}
+
+	/**
 	 * Checks if a congregation exists.
 	 *
 	 * @param int $church_id Church ID.
@@ -841,6 +1236,16 @@ class IADAL_Departments_Controller {
 	}
 
 	/**
+	 * Gets component user login.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string
+	 */
+	private function get_component_login( int $user_id ): string {
+		return $this->repository->user_login( $user_id );
+	}
+
+	/**
 	 * Stores temporary credentials for one-time display.
 	 *
 	 * @param int                               $department_id Department ID.
@@ -855,7 +1260,7 @@ class IADAL_Departments_Controller {
 			array(
 				'current_user'  => get_current_user_id(),
 				'department_id' => $department_id,
-				'credentials'   => $credentials,
+				'credentials'   => $this->encrypt_credentials( $credentials ),
 			),
 			2 * MINUTE_IN_SECONDS
 		);
@@ -881,15 +1286,67 @@ class IADAL_Departments_Controller {
 			! is_array( $payload )
 			|| (int) ( $payload['current_user'] ?? 0 ) !== get_current_user_id()
 			|| (int) ( $payload['department_id'] ?? 0 ) !== $department_id
-			|| ! isset( $payload['credentials'] )
-			|| ! is_array( $payload['credentials'] )
+			|| empty( $payload['credentials'] )
 		) {
 			return array();
 		}
 
 		delete_transient( 'iadal_department_credentials_' . $key );
 
-		return $payload['credentials'];
+		return $this->decrypt_credentials( (string) $payload['credentials'] );
+	}
+
+	/**
+	 * Encrypts temporary credentials for transient storage.
+	 *
+	 * @param array<int, array<string, string>> $credentials Credentials.
+	 * @return string
+	 */
+	private function encrypt_credentials( array $credentials ): string {
+		if ( ! function_exists( 'openssl_encrypt' ) ) {
+			return '';
+		}
+
+		$iv     = random_bytes( 16 );
+		$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+		$cipher = openssl_encrypt( wp_json_encode( $credentials ), 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
+
+		if ( false === $cipher ) {
+			return '';
+		}
+
+		return base64_encode( $iv . $cipher ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+	}
+
+	/**
+	 * Decrypts temporary credentials from transient storage.
+	 *
+	 * @param string $payload Encrypted payload.
+	 * @return array<int, array<string, string>>
+	 */
+	private function decrypt_credentials( string $payload ): array {
+		if ( ! function_exists( 'openssl_decrypt' ) ) {
+			return array();
+		}
+
+		$raw = base64_decode( $payload, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+		if ( false === $raw || strlen( $raw ) <= 16 ) {
+			return array();
+		}
+
+		$iv     = substr( $raw, 0, 16 );
+		$cipher = substr( $raw, 16 );
+		$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+		$json   = openssl_decrypt( $cipher, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
+
+		if ( false === $json ) {
+			return array();
+		}
+
+		$credentials = json_decode( $json, true );
+
+		return is_array( $credentials ) ? $credentials : array();
 	}
 
 	/**

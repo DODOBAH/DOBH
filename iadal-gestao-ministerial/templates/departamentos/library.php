@@ -30,11 +30,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<th><?php esc_html_e( 'Identificador', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Funcionalidades', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Status', 'iadal-gestao-ministerial' ); ?></th>
+					<th><?php esc_html_e( 'Acoes', 'iadal-gestao-ministerial' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
 				<?php if ( empty( $library ) ) : ?>
-					<tr><td colspan="5"><?php esc_html_e( 'Nenhum departamento na biblioteca.', 'iadal-gestao-ministerial' ); ?></td></tr>
+					<tr><td colspan="6"><?php esc_html_e( 'Nenhum departamento na biblioteca.', 'iadal-gestao-ministerial' ); ?></td></tr>
 				<?php endif; ?>
 
 				<?php foreach ( $library as $item ) : ?>
@@ -62,6 +63,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 						</td>
 						<td data-label="<?php esc_attr_e( 'Status', 'iadal-gestao-ministerial' ); ?>">
 							<span class="iadal-status iadal-status-<?php echo esc_attr( $item['status'] ); ?>"><?php echo esc_html( $item['status'] ); ?></span>
+						</td>
+						<td data-label="<?php esc_attr_e( 'Acoes', 'iadal-gestao-ministerial' ); ?>">
+							<?php if ( 'personalizado' === $item['type'] ) : ?>
+								<a class="button button-small" href="<?php echo esc_url( add_query_arg( array( 'page' => 'iadal-departments-library-edit', 'library_id' => (int) $item['id'] ), admin_url( 'admin.php' ) ) ); ?>">
+									<?php esc_html_e( 'Editar', 'iadal-gestao-ministerial' ); ?>
+								</a>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="iadal-inline-form iadal-delete-form">
+									<input type="hidden" name="action" value="iadal_departments_library_delete" />
+									<input type="hidden" name="library_id" value="<?php echo esc_attr( (string) $item['id'] ); ?>" />
+									<?php wp_nonce_field( 'iadal_departments_library_delete_' . (int) $item['id'], 'iadal_departments_nonce' ); ?>
+									<button type="submit" class="button button-small button-link-delete"><?php esc_html_e( 'Inativar', 'iadal-gestao-ministerial' ); ?></button>
+								</form>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Oficial', 'iadal-gestao-ministerial' ); ?></span>
+							<?php endif; ?>
 						</td>
 					</tr>
 				<?php endforeach; ?>

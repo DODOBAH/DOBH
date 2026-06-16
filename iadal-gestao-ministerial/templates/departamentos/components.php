@@ -49,6 +49,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<?php wp_nonce_field( 'iadal_departments_component_create_' . (int) $department['id'], 'iadal_departments_nonce' ); ?>
 
 			<label>
+				<span><?php esc_html_e( 'Vincular membro', 'iadal-gestao-ministerial' ); ?></span>
+				<select name="member_id">
+					<option value="0"><?php esc_html_e( 'Sem vinculo', 'iadal-gestao-ministerial' ); ?></option>
+					<?php foreach ( $members as $member ) : ?>
+						<option value="<?php echo esc_attr( (string) $member['id'] ); ?>">
+							<?php echo esc_html( $member['full_name'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+
+			<label>
 				<span><?php esc_html_e( 'Nome', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
 				<input type="text" name="name" required maxlength="190" />
 			</label>
@@ -79,11 +91,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<th><?php esc_html_e( 'Funcao', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Tipo', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Status', 'iadal-gestao-ministerial' ); ?></th>
+					<th><?php esc_html_e( 'Acoes', 'iadal-gestao-ministerial' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
 				<?php if ( empty( $components ) ) : ?>
-					<tr><td colspan="5"><?php esc_html_e( 'Nenhum componente cadastrado.', 'iadal-gestao-ministerial' ); ?></td></tr>
+					<tr><td colspan="6"><?php esc_html_e( 'Nenhum componente cadastrado.', 'iadal-gestao-ministerial' ); ?></td></tr>
 				<?php endif; ?>
 
 				<?php foreach ( $components as $component ) : ?>
@@ -93,6 +106,55 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<td data-label="<?php esc_attr_e( 'Funcao', 'iadal-gestao-ministerial' ); ?>"><?php echo esc_html( $component['function_name'] ?: '-' ); ?></td>
 						<td data-label="<?php esc_attr_e( 'Tipo', 'iadal-gestao-ministerial' ); ?>"><?php echo ! empty( $component['is_leader'] ) ? esc_html__( 'Lider', 'iadal-gestao-ministerial' ) : esc_html__( 'Componente', 'iadal-gestao-ministerial' ); ?></td>
 						<td data-label="<?php esc_attr_e( 'Status', 'iadal-gestao-ministerial' ); ?>"><span class="iadal-status iadal-status-<?php echo esc_attr( $component['status'] ); ?>"><?php echo esc_html( $component['status'] ); ?></span></td>
+						<td data-label="<?php esc_attr_e( 'Acoes', 'iadal-gestao-ministerial' ); ?>">
+							<details class="iadal-inline-details">
+								<summary class="button button-small"><?php esc_html_e( 'Editar', 'iadal-gestao-ministerial' ); ?></summary>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="iadal-component-edit-form">
+									<input type="hidden" name="action" value="iadal_departments_component_update" />
+									<input type="hidden" name="component_id" value="<?php echo esc_attr( (string) $component['id'] ); ?>" />
+									<?php wp_nonce_field( 'iadal_departments_component_update_' . (int) $component['id'], 'iadal_departments_nonce' ); ?>
+									<label>
+										<span><?php esc_html_e( 'Nome', 'iadal-gestao-ministerial' ); ?></span>
+										<input type="text" name="name" value="<?php echo esc_attr( $component['name'] ); ?>" maxlength="190" required />
+									</label>
+									<label>
+										<span><?php esc_html_e( 'Telefone', 'iadal-gestao-ministerial' ); ?></span>
+										<input type="text" name="phone" value="<?php echo esc_attr( $component['phone'] ?? '' ); ?>" maxlength="30" />
+									</label>
+									<label>
+										<span><?php esc_html_e( 'Funcao', 'iadal-gestao-ministerial' ); ?></span>
+										<input type="text" name="function_name" value="<?php echo esc_attr( $component['function_name'] ?? '' ); ?>" maxlength="120" />
+									</label>
+									<label>
+										<span><?php esc_html_e( 'Status', 'iadal-gestao-ministerial' ); ?></span>
+										<select name="status">
+											<option value="ativo" <?php selected( $component['status'], 'ativo' ); ?>><?php esc_html_e( 'Ativo', 'iadal-gestao-ministerial' ); ?></option>
+											<option value="bloqueado" <?php selected( $component['status'], 'bloqueado' ); ?>><?php esc_html_e( 'Bloqueado', 'iadal-gestao-ministerial' ); ?></option>
+											<option value="inativo" <?php selected( $component['status'], 'inativo' ); ?>><?php esc_html_e( 'Inativo', 'iadal-gestao-ministerial' ); ?></option>
+										</select>
+									</label>
+									<button type="submit" class="button button-primary button-small"><?php esc_html_e( 'Salvar', 'iadal-gestao-ministerial' ); ?></button>
+								</form>
+							</details>
+
+							<?php if ( ! empty( $component['user_id'] ) ) : ?>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="iadal-inline-form iadal-reset-password-form">
+									<input type="hidden" name="action" value="iadal_departments_component_reset_password" />
+									<input type="hidden" name="component_id" value="<?php echo esc_attr( (string) $component['id'] ); ?>" />
+									<?php wp_nonce_field( 'iadal_departments_component_reset_password_' . (int) $component['id'], 'iadal_departments_nonce' ); ?>
+									<button type="submit" class="button button-small"><?php esc_html_e( 'Nova senha', 'iadal-gestao-ministerial' ); ?></button>
+								</form>
+							<?php endif; ?>
+
+							<?php if ( empty( $component['is_leader'] ) ) : ?>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="iadal-inline-form iadal-delete-form">
+									<input type="hidden" name="action" value="iadal_departments_component_delete" />
+									<input type="hidden" name="component_id" value="<?php echo esc_attr( (string) $component['id'] ); ?>" />
+									<?php wp_nonce_field( 'iadal_departments_component_delete_' . (int) $component['id'], 'iadal_departments_nonce' ); ?>
+									<button type="submit" class="button button-small button-link-delete"><?php esc_html_e( 'Remover', 'iadal-gestao-ministerial' ); ?></button>
+								</form>
+							<?php endif; ?>
+						</td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>

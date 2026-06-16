@@ -121,6 +121,15 @@ class IADAL_Departments_Module {
 
 		add_submenu_page(
 			null,
+			__( 'Editar Personalizado', 'iadal-gestao-ministerial' ),
+			__( 'Editar Personalizado', 'iadal-gestao-ministerial' ),
+			'iadal_create_custom_departments',
+			'iadal-departments-library-edit',
+			array( $this->controller, 'render_edit_library_page' )
+		);
+
+		add_submenu_page(
+			null,
 			__( 'Editar Departamento', 'iadal-gestao-ministerial' ),
 			__( 'Editar Departamento', 'iadal-gestao-ministerial' ),
 			'iadal_edit_departments',

@@ -72,6 +72,9 @@ class IADAL_Departments_Repository {
 			)
 		);
 
+		$args['type']   = in_array( $args['type'], array( '', 'oficial', 'personalizado' ), true ) ? $args['type'] : '';
+		$args['status'] = in_array( $args['status'], array( '', 'ativo', 'inativo', 'bloqueado' ), true ) ? $args['status'] : '';
+
 		$where  = array( 'deleted_at IS NULL' );
 		$values = array();
 
@@ -136,6 +139,60 @@ class IADAL_Departments_Repository {
 		}
 
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Updates a custom library department.
+	 *
+	 * @param int                  $library_id Library ID.
+	 * @param array<string, mixed> $data Data.
+	 * @return bool
+	 */
+	public function update_library( int $library_id, array $data ): bool {
+		global $wpdb;
+
+		$data['updated_at'] = IADAL_Database::now();
+		$data['updated_by'] = get_current_user_id();
+
+		$result = $wpdb->update(
+			$this->library_table,
+			$data,
+			array(
+				'id'   => $library_id,
+				'type' => 'personalizado',
+			),
+			$this->feature_formats( $data ),
+			array( '%d', '%s' )
+		);
+
+		return false !== $result;
+	}
+
+	/**
+	 * Soft deletes a custom library department.
+	 *
+	 * @param int $library_id Library ID.
+	 * @return bool
+	 */
+	public function delete_library( int $library_id ): bool {
+		global $wpdb;
+
+		$result = $wpdb->update(
+			$this->library_table,
+			array(
+				'status'     => 'inativo',
+				'deleted_at' => IADAL_Database::now(),
+				'deleted_by' => get_current_user_id(),
+			),
+			array(
+				'id'   => $library_id,
+				'type' => 'personalizado',
+			),
+			array( '%s', '%s', '%d' ),
+			array( '%d', '%s' )
+		);
+
+		return false !== $result;
 	}
 
 	/**
@@ -206,7 +263,7 @@ class IADAL_Departments_Repository {
 			LEFT JOIN {$churches_table} c ON c.id = d.church_id
 			WHERE {$where_sql}
 			ORDER BY c.name ASC, d.name ASC
-			LIMIT %d OFFSET %d';
+			LIMIT %d OFFSET %d";
 
 		return $wpdb->get_results( $wpdb->prepare( $sql, $values ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names are generated internally.
 	}
@@ -270,6 +327,22 @@ class IADAL_Departments_Repository {
 		$department = $wpdb->get_row( $wpdb->prepare( $sql, $department_id ), ARRAY_A );
 
 		return $department ?: null;
+	}
+
+	/**
+	 * Finds one congregation.
+	 *
+	 * @param int $church_id Church ID.
+	 * @return array<string, mixed>|null
+	 */
+	public function find_church( int $church_id ): ?array {
+		global $wpdb;
+
+		$churches_table = IADAL_Database::table( 'churches' );
+		$sql            = "SELECT id, name, status FROM {$churches_table} WHERE id = %d AND type = 'congregacao' AND deleted_at IS NULL LIMIT 1";
+		$church         = $wpdb->get_row( $wpdb->prepare( $sql, $church_id ), ARRAY_A );
+
+		return $church ?: null;
 	}
 
 	/**
@@ -398,6 +471,20 @@ class IADAL_Departments_Repository {
 	}
 
 	/**
+	 * Gets an internal user login by ID.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string
+	 */
+	public function user_login( int $user_id ): string {
+		global $wpdb;
+
+		$sql = "SELECT login FROM {$this->users_table} WHERE id = %d LIMIT 1";
+
+		return (string) $wpdb->get_var( $wpdb->prepare( $sql, $user_id ) );
+	}
+
+	/**
 	 * Adds a component to a department.
 	 *
 	 * @param array<string, mixed> $data Component data.
@@ -438,6 +525,88 @@ class IADAL_Departments_Repository {
 	}
 
 	/**
+	 * Finds one component.
+	 *
+	 * @param int $component_id Component ID.
+	 * @return array<string, mixed>|null
+	 */
+	public function find_component( int $component_id ): ?array {
+		global $wpdb;
+
+		$sql       = "SELECT * FROM {$this->department_users_table} WHERE id = %d AND deleted_at IS NULL LIMIT 1";
+		$component = $wpdb->get_row( $wpdb->prepare( $sql, $component_id ), ARRAY_A );
+
+		return $component ?: null;
+	}
+
+	/**
+	 * Updates one component.
+	 *
+	 * @param int                  $component_id Component ID.
+	 * @param array<string, mixed> $data Component data.
+	 * @return bool
+	 */
+	public function update_component( int $component_id, array $data ): bool {
+		global $wpdb;
+
+		$data['updated_at'] = IADAL_Database::now();
+		$data['updated_by'] = get_current_user_id();
+
+		$result = $wpdb->update(
+			$this->department_users_table,
+			$data,
+			array( 'id' => $component_id ),
+			$this->component_formats( $data ),
+			array( '%d' )
+		);
+
+		return false !== $result;
+	}
+
+	/**
+	 * Soft deletes one component and inactivates its internal user.
+	 *
+	 * @param int $component_id Component ID.
+	 * @return bool
+	 */
+	public function delete_component( int $component_id ): bool {
+		global $wpdb;
+
+		$component = $this->find_component( $component_id );
+
+		if ( ! $component ) {
+			return false;
+		}
+
+		$result = $wpdb->update(
+			$this->department_users_table,
+			array(
+				'status'     => 'inativo',
+				'deleted_at' => IADAL_Database::now(),
+				'deleted_by' => get_current_user_id(),
+			),
+			array( 'id' => $component_id ),
+			array( '%s', '%s', '%d' ),
+			array( '%d' )
+		);
+
+		if ( false === $result ) {
+			return false;
+		}
+
+		if ( ! empty( $component['user_id'] ) ) {
+			$this->update_internal_user(
+				(int) $component['user_id'],
+				array(
+					'status' => 'inativo',
+				)
+			);
+		}
+
+		return true;
+	}
+
+	/**
 	 * Soft deletes a department.
 	 *
 	 * @param int $department_id Department ID.
@@ -446,16 +615,83 @@ class IADAL_Departments_Repository {
 	public function delete_department( int $department_id ): bool {
 		global $wpdb;
 
+		$now = IADAL_Database::now();
 		$result = $wpdb->update(
 			$this->departments_table,
 			array(
 				'status'     => 'inativo',
-				'deleted_at' => IADAL_Database::now(),
+				'deleted_at' => $now,
 				'deleted_by' => get_current_user_id(),
 			),
 			array( 'id' => $department_id ),
 			array( '%s', '%s', '%d' ),
 			array( '%d' )
+		);
+
+		if ( false === $result ) {
+			return false;
+		}
+
+		$components_result = $wpdb->update(
+			$this->department_users_table,
+			array(
+				'status'     => 'inativo',
+				'deleted_at' => $now,
+				'deleted_by' => get_current_user_id(),
+			),
+			array( 'department_id' => $department_id ),
+			array( '%s', '%s', '%d' ),
+			array( '%d' )
+		);
+
+		if ( false === $components_result ) {
+			return false;
+		}
+
+		$users_result = $wpdb->update(
+			$this->users_table,
+			array(
+				'status'     => 'inativo',
+				'updated_at' => $now,
+				'updated_by' => get_current_user_id(),
+			),
+			array( 'department_id' => $department_id ),
+			array( '%s', '%s', '%d' ),
+			array( '%d' )
+		);
+
+		return false !== $users_result;
+	}
+
+	/**
+	 * Updates a congregation module status when a department affects it.
+	 *
+	 * @param int    $church_id Church ID.
+	 * @param string $module_key Module key.
+	 * @param string $status Status.
+	 * @return bool
+	 */
+	public function update_church_module_status( int $church_id, string $module_key, string $status ): bool {
+		global $wpdb;
+
+		$modules_table = IADAL_Database::table( 'church_modules' );
+
+		if ( ! IADAL_Database::table_exists( $modules_table ) ) {
+			return true;
+		}
+
+		$result = $wpdb->update(
+			$modules_table,
+			array(
+				'status'     => $status,
+				'updated_at' => IADAL_Database::now(),
+			),
+			array(
+				'church_id'  => $church_id,
+				'module_key' => $module_key,
+			),
+			array( '%s', '%s' ),
+			array( '%d', '%s' )
 		);
 
 		return false !== $result;
