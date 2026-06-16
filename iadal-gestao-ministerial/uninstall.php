@@ -23,6 +23,8 @@ global $wpdb;
 $tables = array(
 	$wpdb->prefix . 'iadal_member_documents',
 	$wpdb->prefix . 'iadal_members',
+	$wpdb->prefix . 'iadal_users',
+	$wpdb->prefix . 'iadal_churches',
 );
 
 foreach ( $tables as $table ) {
