@@ -33,6 +33,18 @@ $entry_type_options = IADAL_Members_Controller::entry_type_options();
 				</label>
 
 				<label class="iadal-field">
+					<span><?php esc_html_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
+					<select name="church_id" required>
+						<option value="0"><?php esc_html_e( 'Selecione', 'iadal-gestao-ministerial' ); ?></option>
+						<?php foreach ( $congregations as $congregation ) : ?>
+							<option value="<?php echo esc_attr( (string) $congregation['id'] ); ?>">
+								<?php echo esc_html( $congregation['name'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+
+				<label class="iadal-field">
 					<span><?php esc_html_e( 'Nome completo', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
 					<input type="text" name="full_name" required maxlength="190" />
 				</label>

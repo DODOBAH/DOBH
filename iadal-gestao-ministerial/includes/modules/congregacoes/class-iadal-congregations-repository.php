@@ -29,11 +29,19 @@ class IADAL_Congregations_Repository {
 	private string $users_table;
 
 	/**
+	 * Church modules table name.
+	 *
+	 * @var string
+	 */
+	private string $modules_table;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->churches_table = IADAL_Database::table( 'churches' );
 		$this->users_table    = IADAL_Database::table( 'users' );
+		$this->modules_table  = IADAL_Database::table( 'church_modules' );
 	}
 
 	/**
@@ -269,6 +277,50 @@ class IADAL_Congregations_Repository {
 	}
 
 	/**
+	 * Creates the base module availability records for a congregation.
+	 *
+	 * @param int $church_id Congregation ID.
+	 * @return bool
+	 */
+	public function create_base_modules( int $church_id ): bool {
+		global $wpdb;
+
+		$modules = array(
+			'membros'      => __( 'Membros', 'iadal-gestao-ministerial' ),
+			'financeiro'   => __( 'Financeiro Local', 'iadal-gestao-ministerial' ),
+			'agenda'       => __( 'Agenda', 'iadal-gestao-ministerial' ),
+			'patrimonio'   => __( 'Patrimonio', 'iadal-gestao-ministerial' ),
+			'limpeza'      => __( 'Produtos de Limpeza', 'iadal-gestao-ministerial' ),
+			'departamentos'=> __( 'Departamentos', 'iadal-gestao-ministerial' ),
+			'ebd'          => __( 'EBD', 'iadal-gestao-ministerial' ),
+			'arquivos'     => __( 'Arquivos', 'iadal-gestao-ministerial' ),
+			'notificacoes' => __( 'Notificacoes', 'iadal-gestao-ministerial' ),
+		);
+
+		foreach ( $modules as $module_key => $module_name ) {
+			$result = $wpdb->replace(
+				$this->modules_table,
+				array(
+					'church_id'   => $church_id,
+					'module_key'  => $module_key,
+					'module_name' => $module_name,
+					'status'      => 'disponivel',
+					'created_by'  => get_current_user_id(),
+					'created_at'  => IADAL_Database::now(),
+					'updated_at'  => IADAL_Database::now(),
+				),
+				array( '%d', '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+
+			if ( false === $result ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Changes congregation status and mirrors leadership user status.
 	 *
 	 * @param int    $church_id Congregation ID.
@@ -289,16 +341,49 @@ class IADAL_Congregations_Repository {
 			return false;
 		}
 
-		$user_status = 'bloqueado' === $status ? 'bloqueado' : 'ativo';
-		$result      = $wpdb->update(
+		if ( 'bloqueado' === $status ) {
+			$sql = "UPDATE {$this->users_table}
+				SET status_before_church_block = status,
+					status = 'bloqueado',
+					blocked_by_church_status = 1,
+					updated_at = %s,
+					updated_by = %d
+				WHERE church_id = %d
+					AND role IN ('pastor_local', 'secretaria_local')
+					AND status <> 'bloqueado'";
+
+			$result = $wpdb->query( $wpdb->prepare( $sql, IADAL_Database::now(), get_current_user_id(), $church_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is generated internally.
+
+			return false !== $result;
+		}
+
+		if ( 'ativo' === $status ) {
+			$sql = "UPDATE {$this->users_table}
+				SET status = COALESCE(NULLIF(status_before_church_block, ''), 'ativo'),
+					status_before_church_block = NULL,
+					blocked_by_church_status = 0,
+					updated_at = %s,
+					updated_by = %d
+				WHERE church_id = %d
+					AND role IN ('pastor_local', 'secretaria_local')
+					AND blocked_by_church_status = 1";
+
+			$result = $wpdb->query( $wpdb->prepare( $sql, IADAL_Database::now(), get_current_user_id(), $church_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is generated internally.
+
+			return false !== $result;
+		}
+
+		$result = $wpdb->update(
 			$this->users_table,
 			array(
-				'status'     => $user_status,
-				'updated_at' => IADAL_Database::now(),
-				'updated_by' => get_current_user_id(),
+				'status'                   => 'inativo',
+				'status_before_church_block' => null,
+				'blocked_by_church_status' => 0,
+				'updated_at'               => IADAL_Database::now(),
+				'updated_by'               => get_current_user_id(),
 			),
 			array( 'church_id' => $church_id ),
-			array( '%s', '%s', '%d' ),
+			array( '%s', '%s', '%d', '%s', '%d' ),
 			array( '%d' )
 		);
 
@@ -344,7 +429,22 @@ class IADAL_Congregations_Repository {
 			array( '%d' )
 		);
 
-		return false !== $users_deleted;
+		if ( false === $users_deleted ) {
+			return false;
+		}
+
+		$modules_deleted = $wpdb->update(
+			$this->modules_table,
+			array(
+				'status'     => 'inativo',
+				'updated_at' => $now,
+			),
+			array( 'church_id' => $church_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		return false !== $modules_deleted;
 	}
 
 	/**
@@ -378,6 +478,7 @@ class IADAL_Congregations_Repository {
 			'department_id',
 			'member_id',
 			'must_change_password',
+			'blocked_by_church_status',
 			'failed_login_attempts',
 			'created_by',
 			'updated_by',

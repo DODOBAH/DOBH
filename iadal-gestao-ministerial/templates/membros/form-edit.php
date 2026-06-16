@@ -68,6 +68,18 @@ $acclamation_url    = ! empty( $acclamation_letter['id'] ) ? wp_nonce_url(
 				</label>
 
 				<label class="iadal-field">
+					<span><?php esc_html_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
+					<select name="church_id" required>
+						<option value="0"><?php esc_html_e( 'Selecione', 'iadal-gestao-ministerial' ); ?></option>
+						<?php foreach ( $congregations as $congregation ) : ?>
+							<option value="<?php echo esc_attr( (string) $congregation['id'] ); ?>" <?php selected( (int) ( $member['church_id'] ?? 0 ), (int) $congregation['id'] ); ?>>
+								<?php echo esc_html( $congregation['name'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+
+				<label class="iadal-field">
 					<span><?php esc_html_e( 'Nome completo', 'iadal-gestao-ministerial' ); ?> <strong>*</strong></span>
 					<input type="text" name="full_name" required maxlength="190" value="<?php echo esc_attr( $member['full_name'] ?? '' ); ?>" />
 				</label>

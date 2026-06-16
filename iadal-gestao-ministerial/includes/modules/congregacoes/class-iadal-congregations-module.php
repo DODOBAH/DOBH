@@ -49,6 +49,10 @@ class IADAL_Congregations_Module {
 	 * @return void
 	 */
 	private function ensure_capabilities(): void {
+		if ( IADAL_GESTAO_VERSION === get_option( 'iadal_congregations_capabilities_version', '' ) ) {
+			return;
+		}
+
 		$administrator = get_role( 'administrator' );
 
 		if ( ! $administrator ) {
@@ -68,6 +72,8 @@ class IADAL_Congregations_Module {
 		foreach ( $capabilities as $capability ) {
 			$administrator->add_cap( $capability );
 		}
+
+		update_option( 'iadal_congregations_capabilities_version', IADAL_GESTAO_VERSION );
 	}
 
 	/**

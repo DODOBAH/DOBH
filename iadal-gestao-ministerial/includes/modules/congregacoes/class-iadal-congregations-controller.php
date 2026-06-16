@@ -164,9 +164,12 @@ class IADAL_Congregations_Controller {
 			);
 		}
 
+		IADAL_Database::begin_transaction();
+
 		$congregation_id = $this->repository->create( $data );
 
 		if ( ! $congregation_id ) {
+			IADAL_Database::rollback();
 			$this->redirect(
 				'iadal-congregations-create',
 				array(
@@ -175,10 +178,20 @@ class IADAL_Congregations_Controller {
 			);
 		}
 
+		if ( ! $this->repository->create_base_modules( (int) $congregation_id ) ) {
+			IADAL_Database::rollback();
+			$this->redirect(
+				'iadal-congregations-create',
+				array(
+					'iadal_error' => __( 'Nao foi possivel criar a estrutura base da congregacao.', 'iadal-gestao-ministerial' ),
+				)
+			);
+		}
+
 		$credentials = $this->create_leadership_users( (int) $congregation_id, $data );
 
 		if ( is_wp_error( $credentials ) ) {
-			$this->repository->delete( (int) $congregation_id );
+			IADAL_Database::rollback();
 			$this->redirect(
 				'iadal-congregations-create',
 				array(
@@ -187,7 +200,10 @@ class IADAL_Congregations_Controller {
 			);
 		}
 
+		IADAL_Database::commit();
+
 		$credential_key = $this->store_credentials_transient( (int) $congregation_id, $credentials );
+		IADAL_Audit::log( 'congregations', 'create', 'congregation', (int) $congregation_id, null, $data, (int) $congregation_id );
 
 		$this->redirect(
 			'iadal-congregations-credentials',
@@ -229,9 +245,12 @@ class IADAL_Congregations_Controller {
 			);
 		}
 
+		IADAL_Database::begin_transaction();
+
 		$updated = $this->repository->update( $congregation_id, $data );
 
 		if ( ! $updated ) {
+			IADAL_Database::rollback();
 			$this->redirect(
 				'iadal-congregations-edit',
 				array(
@@ -241,7 +260,35 @@ class IADAL_Congregations_Controller {
 			);
 		}
 
-		$this->sync_leadership_users( $congregation, $data );
+		$leadership_credentials = $this->sync_leadership_users( $congregation, $data, $congregation_id );
+
+		if ( is_wp_error( $leadership_credentials ) ) {
+			IADAL_Database::rollback();
+			$this->redirect(
+				'iadal-congregations-edit',
+				array(
+					'congregation_id' => $congregation_id,
+					'iadal_error'     => $leadership_credentials->get_error_message(),
+				)
+			);
+		}
+
+		IADAL_Database::commit();
+
+		IADAL_Audit::log( 'congregations', 'update', 'congregation', $congregation_id, $congregation, $data, $congregation_id );
+
+		if ( ! empty( $leadership_credentials ) ) {
+			$credential_key = $this->store_credentials_transient( $congregation_id, $leadership_credentials );
+
+			$this->redirect(
+				'iadal-congregations-credentials',
+				array(
+					'congregation_id' => $congregation_id,
+					'credential_key'  => $credential_key,
+					'iadal_notice'    => __( 'Lideranca atualizada. Guarde as novas credenciais exibidas agora.', 'iadal-gestao-ministerial' ),
+				)
+			);
+		}
 
 		$this->redirect(
 			'iadal-congregations',
@@ -272,6 +319,8 @@ class IADAL_Congregations_Controller {
 				)
 			);
 		}
+
+		IADAL_Audit::log( 'congregations', 'delete', 'congregation', $congregation_id, null, array( 'deleted' => true ), $congregation_id );
 
 		$this->redirect(
 			'iadal-congregations',
@@ -308,6 +357,8 @@ class IADAL_Congregations_Controller {
 				)
 			);
 		}
+
+		IADAL_Audit::log( 'congregations', 'set_status', 'congregation', $congregation_id, null, array( 'status' => $status ), $congregation_id );
 
 		$this->redirect(
 			'iadal-congregations',
@@ -347,13 +398,14 @@ class IADAL_Congregations_Controller {
 
 		$password      = wp_generate_password( 14, true, true );
 		$password_hash = wp_hash_password( $password );
+		$user_status    = 'ativo' === ( $congregation['status'] ?? '' ) ? (string) $target_user['status'] : (string) $congregation['status'];
 		$updated       = $this->repository->update_user(
 			$user_id,
 			array(
 				'password_hash'         => $password_hash,
-				'initial_password_hash' => $password_hash,
+				'password_generated_at' => IADAL_Database::now(),
 				'must_change_password'  => 1,
-				'status'                => 'ativo',
+				'status'                => $user_status,
 			)
 		);
 
@@ -366,6 +418,8 @@ class IADAL_Congregations_Controller {
 				)
 			);
 		}
+
+		IADAL_Audit::log( 'congregations', 'reset_password', 'iadal_user', $user_id, null, array( 'role' => (string) $target_user['role'] ), $congregation_id );
 
 		$credential_key = $this->store_credentials_transient(
 			$congregation_id,
@@ -512,6 +566,32 @@ class IADAL_Congregations_Controller {
 			$errors[] = __( 'Informe o nome da Secretaria Local.', 'iadal-gestao-ministerial' );
 		}
 
+		$max_lengths = array(
+			'name'               => 190,
+			'pastor_name'        => 190,
+			'pastor_phone'       => 30,
+			'secretary_name'     => 190,
+			'secretary_phone'    => 30,
+			'zip_code'           => 20,
+			'address'            => 255,
+			'address_number'     => 30,
+			'address_complement' => 120,
+			'district'           => 120,
+			'city'               => 120,
+			'state'              => 2,
+		);
+
+		foreach ( $max_lengths as $field => $max_length ) {
+			if ( isset( $data[ $field ] ) && strlen( (string) $data[ $field ] ) > $max_length ) {
+				$errors[] = sprintf(
+					/* translators: 1: field name, 2: max length. */
+					__( 'O campo %1$s deve ter no maximo %2$d caracteres.', 'iadal-gestao-ministerial' ),
+					$field,
+					$max_length
+				);
+			}
+		}
+
 		return $errors;
 	}
 
@@ -527,18 +607,23 @@ class IADAL_Congregations_Controller {
 		$secretary_password = wp_generate_password( 14, true, true );
 		$pastor_login       = $this->generate_unique_login( $data['pastor_name'], 'pastor' );
 		$secretary_login    = $this->generate_unique_login( $data['secretary_name'], 'secretaria' );
+		$user_status        = $this->user_status_from_church_status( (string) $data['status'] );
+		$blocked_by_church  = 'bloqueado' === $data['status'] ? 1 : 0;
+		$status_before_block = 'bloqueado' === $data['status'] ? 'ativo' : null;
 
 		$pastor_id = $this->repository->create_user(
 			array(
 				'name'                  => (string) $data['pastor_name'],
 				'login'                 => $pastor_login,
 				'password_hash'         => wp_hash_password( $pastor_password ),
-				'initial_password_hash' => wp_hash_password( $pastor_password ),
+				'password_generated_at' => IADAL_Database::now(),
 				'role'                  => 'pastor_local',
 				'church_id'             => $congregation_id,
 				'phone'                 => (string) $data['pastor_phone'],
-				'status'                => 'ativo',
+				'status'                => $user_status,
 				'must_change_password'  => 1,
+				'blocked_by_church_status' => $blocked_by_church,
+				'status_before_church_block' => $status_before_block,
 			)
 		);
 
@@ -551,12 +636,14 @@ class IADAL_Congregations_Controller {
 				'name'                  => (string) $data['secretary_name'],
 				'login'                 => $secretary_login,
 				'password_hash'         => wp_hash_password( $secretary_password ),
-				'initial_password_hash' => wp_hash_password( $secretary_password ),
+				'password_generated_at' => IADAL_Database::now(),
 				'role'                  => 'secretaria_local',
 				'church_id'             => $congregation_id,
 				'phone'                 => (string) $data['secretary_phone'],
-				'status'                => 'ativo',
+				'status'                => $user_status,
 				'must_change_password'  => 1,
+				'blocked_by_church_status' => $blocked_by_church,
+				'status_before_church_block' => $status_before_block,
 			)
 		);
 
@@ -597,30 +684,177 @@ class IADAL_Congregations_Controller {
 	 *
 	 * @param array<string, mixed> $congregation Existing congregation.
 	 * @param array<string, mixed> $data New congregation data.
-	 * @return void
+	 * @param int                  $congregation_id Congregation ID.
+	 * @return array<int, array<string, string>>|WP_Error
 	 */
-	private function sync_leadership_users( array $congregation, array $data ): void {
-		if ( ! empty( $congregation['pastor_user_id'] ) ) {
+	private function sync_leadership_users( array $congregation, array $data, int $congregation_id ) {
+		$credentials = array();
+
+		$pastor_changed = $this->leadership_name_changed( (string) ( $congregation['pastor_name'] ?? '' ), (string) $data['pastor_name'] );
+
+		if ( $pastor_changed || empty( $congregation['pastor_user_id'] ) ) {
+			$pastor_credentials = $this->replace_leadership_user(
+				$congregation_id,
+				! empty( $congregation['pastor_user_id'] ) ? (int) $congregation['pastor_user_id'] : 0,
+				(string) $data['pastor_name'],
+				(string) $data['pastor_phone'],
+				'pastor_local',
+				'pastor',
+				'pastor_user_id',
+				(string) $data['status']
+			);
+
+			if ( is_wp_error( $pastor_credentials ) ) {
+				return $pastor_credentials;
+			}
+
+			$credentials[] = $pastor_credentials;
+		} elseif ( ! empty( $congregation['pastor_user_id'] ) ) {
 			$this->repository->update_user(
 				(int) $congregation['pastor_user_id'],
 				array(
 					'name'   => (string) $data['pastor_name'],
 					'phone'  => (string) $data['pastor_phone'],
-					'status' => 'bloqueado' === $data['status'] ? 'bloqueado' : 'ativo',
+					'status' => $this->user_status_from_church_status( (string) $data['status'] ),
 				)
 			);
 		}
 
-		if ( ! empty( $congregation['secretary_user_id'] ) ) {
+		$secretary_changed = $this->leadership_name_changed( (string) ( $congregation['secretary_name'] ?? '' ), (string) $data['secretary_name'] );
+
+		if ( $secretary_changed || empty( $congregation['secretary_user_id'] ) ) {
+			$secretary_credentials = $this->replace_leadership_user(
+				$congregation_id,
+				! empty( $congregation['secretary_user_id'] ) ? (int) $congregation['secretary_user_id'] : 0,
+				(string) $data['secretary_name'],
+				(string) $data['secretary_phone'],
+				'secretaria_local',
+				'secretaria',
+				'secretary_user_id',
+				(string) $data['status']
+			);
+
+			if ( is_wp_error( $secretary_credentials ) ) {
+				return $secretary_credentials;
+			}
+
+			$credentials[] = $secretary_credentials;
+		} elseif ( ! empty( $congregation['secretary_user_id'] ) ) {
 			$this->repository->update_user(
 				(int) $congregation['secretary_user_id'],
 				array(
 					'name'   => (string) $data['secretary_name'],
 					'phone'  => (string) $data['secretary_phone'],
-					'status' => 'bloqueado' === $data['status'] ? 'bloqueado' : 'ativo',
+					'status' => $this->user_status_from_church_status( (string) $data['status'] ),
 				)
 			);
 		}
+
+		return $credentials;
+	}
+
+	/**
+	 * Replaces a leadership user and blocks the previous user.
+	 *
+	 * @param int    $congregation_id Congregation ID.
+	 * @param int    $old_user_id Old user ID.
+	 * @param string $name New user name.
+	 * @param string $phone New user phone.
+	 * @param string $role New user role.
+	 * @param string $login_prefix Login prefix.
+	 * @param string $church_field Church leadership field.
+	 * @param string $church_status Church status.
+	 * @return array<string, string>|WP_Error
+	 */
+	private function replace_leadership_user( int $congregation_id, int $old_user_id, string $name, string $phone, string $role, string $login_prefix, string $church_field, string $church_status ) {
+		if ( $old_user_id > 0 ) {
+			$this->repository->update_user(
+				$old_user_id,
+				array(
+					'status' => 'inativo',
+				)
+			);
+		}
+
+		$password = wp_generate_password( 14, true, true );
+		$login    = $this->generate_unique_login( $name, $login_prefix );
+		$status   = $this->user_status_from_church_status( $church_status );
+		$user_id  = $this->repository->create_user(
+			array(
+				'name'                       => $name,
+				'login'                      => $login,
+				'password_hash'              => wp_hash_password( $password ),
+				'password_generated_at'      => IADAL_Database::now(),
+				'role'                       => $role,
+				'church_id'                  => $congregation_id,
+				'phone'                      => $phone,
+				'status'                     => $status,
+				'must_change_password'       => 1,
+				'blocked_by_church_status'   => 'bloqueado' === $church_status ? 1 : 0,
+				'status_before_church_block' => 'bloqueado' === $church_status ? 'ativo' : null,
+			)
+		);
+
+		if ( ! $user_id ) {
+			return new WP_Error( 'iadal_replace_leadership', __( 'Nao foi possivel criar o novo usuario da lideranca.', 'iadal-gestao-ministerial' ) );
+		}
+
+		$linked = $this->repository->update(
+			$congregation_id,
+			array(
+				$church_field => (int) $user_id,
+			)
+		);
+
+		if ( ! $linked ) {
+			return new WP_Error( 'iadal_replace_leadership_link', __( 'Nao foi possivel vincular o novo usuario da lideranca.', 'iadal-gestao-ministerial' ) );
+		}
+
+		IADAL_Audit::log(
+			'congregations',
+			'replace_leadership',
+			'iadal_user',
+			(int) $user_id,
+			array( 'old_user_id' => $old_user_id, 'role' => $role ),
+			array( 'name' => $name, 'login' => $login, 'role' => $role ),
+			$congregation_id
+		);
+
+		return array(
+			'name'     => $name,
+			'role'     => $role,
+			'login'    => $login,
+			'password' => $password,
+		);
+	}
+
+	/**
+	 * Checks if a leadership name changed.
+	 *
+	 * @param string $old_name Old name.
+	 * @param string $new_name New name.
+	 * @return bool
+	 */
+	private function leadership_name_changed( string $old_name, string $new_name ): bool {
+		return strtolower( trim( $old_name ) ) !== strtolower( trim( $new_name ) );
+	}
+
+	/**
+	 * Maps congregation status to leadership user status.
+	 *
+	 * @param string $church_status Church status.
+	 * @return string
+	 */
+	private function user_status_from_church_status( string $church_status ): string {
+		if ( 'bloqueado' === $church_status ) {
+			return 'bloqueado';
+		}
+
+		if ( 'inativo' === $church_status ) {
+			return 'inativo';
+		}
+
+		return 'ativo';
 	}
 
 	/**
@@ -662,7 +896,7 @@ class IADAL_Congregations_Controller {
 				'congregation_id' => $congregation_id,
 				'credentials'     => $credentials,
 			),
-			15 * MINUTE_IN_SECONDS
+			2 * MINUTE_IN_SECONDS
 		);
 
 		return $key;

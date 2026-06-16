@@ -52,6 +52,7 @@ class IADAL_Members_Repository {
 				'status'          => '',
 				'entry_type'      => '',
 				'birth_month'     => '',
+				'church_id'        => 0,
 				'include_deleted' => false,
 				'limit'           => 50,
 				'offset'          => 0,
@@ -85,11 +86,16 @@ class IADAL_Members_Repository {
 			$values[] = (int) $args['birth_month'];
 		}
 
+		if ( ! empty( $args['church_id'] ) ) {
+			$where[]  = 'church_id = %d';
+			$values[] = (int) $args['church_id'];
+		}
+
 		$where_sql = $where ? 'WHERE ' . implode( ' AND ', $where ) : '';
 		$values[]  = max( 1, (int) $args['limit'] );
 		$values[]  = max( 0, (int) $args['offset'] );
 
-		$fields = 'id, photo_attachment_id, full_name, cpf, phone, email, birth_date, entry_type, status';
+		$fields = 'id, church_id, photo_attachment_id, full_name, cpf, phone, email, birth_date, entry_type, status';
 		$sql    = "SELECT {$fields} FROM {$this->table} {$where_sql} ORDER BY full_name ASC LIMIT %d OFFSET %d";
 
 		return $wpdb->get_results( $wpdb->prepare( $sql, $values ), ARRAY_A );
@@ -111,6 +117,7 @@ class IADAL_Members_Repository {
 				'status'          => '',
 				'entry_type'      => '',
 				'birth_month'     => '',
+				'church_id'        => 0,
 				'include_deleted' => false,
 			)
 		);
@@ -140,6 +147,11 @@ class IADAL_Members_Repository {
 		if ( '' !== $args['birth_month'] ) {
 			$where[]  = 'birth_month = %d';
 			$values[] = (int) $args['birth_month'];
+		}
+
+		if ( ! empty( $args['church_id'] ) ) {
+			$where[]  = 'church_id = %d';
+			$values[] = (int) $args['church_id'];
 		}
 
 		$where_sql = $where ? 'WHERE ' . implode( ' AND ', $where ) : '';
@@ -246,6 +258,24 @@ class IADAL_Members_Repository {
 	}
 
 	/**
+	 * Permanently deletes a member created during a failed transaction-like flow.
+	 *
+	 * @param int $id Member ID.
+	 * @return bool
+	 */
+	public function hard_delete( int $id ): bool {
+		global $wpdb;
+
+		$result = $wpdb->delete(
+			$this->table,
+			array( 'id' => $id ),
+			array( '%d' )
+		);
+
+		return false !== $result;
+	}
+
+	/**
 	 * Checks whether a CPF already exists.
 	 *
 	 * @param string $cpf CPF with digits only.
@@ -272,15 +302,17 @@ class IADAL_Members_Repository {
 	 * @param int $month Month number.
 	 * @param int $limit Results limit.
 	 * @param int $offset Results offset.
+	 * @param int $church_id Optional church ID.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function birthdays( int $month, int $limit = 50, int $offset = 0 ): array {
+	public function birthdays( int $month, int $limit = 50, int $offset = 0, int $church_id = 0 ): array {
 		return $this->all(
 			array(
 				'birth_month' => $month,
 				'status'      => 'ativo',
 				'limit'       => $limit,
 				'offset'      => $offset,
+				'church_id'   => $church_id,
 			)
 		);
 	}
@@ -297,6 +329,7 @@ class IADAL_Members_Repository {
 
 		$data = array(
 			'member_id'     => $member_id,
+			'church_id'     => isset( $document['church_id'] ) ? (int) $document['church_id'] : 0,
 			'document_type' => (string) $document['document_type'],
 			'title'         => (string) $document['title'],
 			'file_name'     => (string) $document['file_name'],
@@ -311,7 +344,7 @@ class IADAL_Members_Repository {
 		$result = $wpdb->insert(
 			$this->documents_table,
 			$data,
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s' )
+			array( '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s' )
 		);
 
 		if ( false === $result ) {
@@ -376,6 +409,7 @@ class IADAL_Members_Repository {
 	private function formats( array $data ): array {
 		$integer_fields = array(
 			'photo_attachment_id',
+			'church_id',
 			'created_by',
 			'updated_by',
 			'deleted_by',

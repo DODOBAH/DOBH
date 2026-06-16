@@ -21,14 +21,19 @@ class IADAL_Activator {
 	 */
 	public static function activate(): void {
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-database.php';
+		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-audit-schema.php';
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-members-schema.php';
 		require_once IADAL_GESTAO_DIR . 'includes/database/class-iadal-congregations-schema.php';
 
 		IADAL_Members_Schema::create();
 		IADAL_Congregations_Schema::create();
+		IADAL_Audit_Schema::create();
 		self::add_capabilities();
 
-		update_option( 'iadal_gestao_version', IADAL_GESTAO_VERSION );
+		if ( function_exists( 'iadal_gestao_ministerial_required_schema_valid' ) && iadal_gestao_ministerial_required_schema_valid() ) {
+			delete_option( 'iadal_gestao_upgrade_error' );
+			update_option( 'iadal_gestao_version', IADAL_GESTAO_VERSION );
+		}
 	}
 
 	/**
@@ -61,5 +66,8 @@ class IADAL_Activator {
 		foreach ( $capabilities as $capability ) {
 			$administrator->add_cap( $capability );
 		}
+
+		update_option( 'iadal_members_capabilities_version', IADAL_GESTAO_VERSION );
+		update_option( 'iadal_congregations_capabilities_version', IADAL_GESTAO_VERSION );
 	}
 }

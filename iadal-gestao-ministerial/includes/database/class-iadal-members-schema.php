@@ -27,6 +27,7 @@ class IADAL_Members_Schema {
 
 		$sql = "CREATE TABLE {$table_name} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			church_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			photo_attachment_id bigint(20) unsigned DEFAULT NULL,
 			full_name varchar(190) NOT NULL,
 			cpf varchar(11) NOT NULL,
@@ -55,6 +56,7 @@ class IADAL_Members_Schema {
 			deleted_by bigint(20) unsigned DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY cpf (cpf),
+			KEY church_id (church_id),
 			KEY full_name (full_name),
 			KEY status (status),
 			KEY entry_type (entry_type),
@@ -68,6 +70,7 @@ class IADAL_Members_Schema {
 		$sql .= "\nCREATE TABLE {$documents_table} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			member_id bigint(20) unsigned NOT NULL,
+			church_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			document_type varchar(40) NOT NULL,
 			title varchar(190) NOT NULL,
 			file_name varchar(190) NOT NULL,
@@ -81,6 +84,7 @@ class IADAL_Members_Schema {
 			deleted_by bigint(20) unsigned DEFAULT NULL,
 			PRIMARY KEY  (id),
 			KEY member_id (member_id),
+			KEY church_id (church_id),
 			KEY document_type (document_type),
 			KEY deleted_at (deleted_at)
 		) {$charset_collate};";

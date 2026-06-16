@@ -69,11 +69,12 @@ class IADAL_Members_Controller {
 		$this->include_template(
 			'membros/list.php',
 			array(
-				'members'  => $members,
-				'filters'  => $filters,
-				'page'     => $page,
-				'per_page' => $per_page,
-				'total'    => $total,
+				'members'       => $members,
+				'filters'       => $filters,
+				'page'          => $page,
+				'per_page'      => $per_page,
+				'total'         => $total,
+				'congregations' => $this->get_congregations_for_select(),
 			)
 		);
 	}
@@ -89,7 +90,8 @@ class IADAL_Members_Controller {
 		$this->include_template(
 			'membros/form-create.php',
 			array(
-				'member' => array(),
+				'member'        => array(),
+				'congregations' => $this->get_congregations_for_select(),
 			)
 		);
 	}
@@ -109,12 +111,17 @@ class IADAL_Members_Controller {
 			wp_die( esc_html__( 'Membro nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		if ( ! $this->can_access_church( (int) ( $member['church_id'] ?? 0 ) ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar este membro.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$this->include_template(
 			'membros/form-edit.php',
 			array(
 				'member'              => $member,
 				'change_letter'       => $this->repository->latest_document( $member_id, 'change_letter' ),
 				'acclamation_letter'  => $this->repository->latest_document( $member_id, 'acclamation_letter' ),
+				'congregations'       => $this->get_congregations_for_select(),
 			)
 		);
 	}
@@ -127,24 +134,28 @@ class IADAL_Members_Controller {
 	public function render_birthdays_page(): void {
 		$this->require_capability( 'iadal_view_members' );
 
-		$month = $this->get_int_from_query( 'birth_month', (int) gmdate( 'n' ) );
-		$month = min( 12, max( 1, $month ) );
+		$month    = $this->get_int_from_query( 'birth_month', (int) gmdate( 'n' ) );
+		$month    = min( 12, max( 1, $month ) );
+		$church_id = max( 0, $this->get_int_from_query( 'church_id', 0 ) );
 		$page     = max( 1, $this->get_int_from_query( 'paged', 1 ) );
 		$per_page = 50;
 		$offset   = ( $page - 1 ) * $per_page;
 		$filters  = array(
 			'birth_month' => (string) $month,
 			'status'      => 'ativo',
+			'church_id'   => $church_id,
 		);
 
 		$this->include_template(
 			'membros/birthday-report.php',
 			array(
-				'members'  => $this->repository->birthdays( $month, $per_page, $offset ),
-				'month'    => $month,
-				'page'     => $page,
-				'per_page' => $per_page,
-				'total'    => $this->repository->count( $filters ),
+				'members'       => $this->repository->birthdays( $month, $per_page, $offset, $church_id ),
+				'month'         => $month,
+				'church_id'     => $church_id,
+				'congregations' => $this->get_congregations_for_select(),
+				'page'          => $page,
+				'per_page'      => $per_page,
+				'total'         => $this->repository->count( $filters ),
 			)
 		);
 	}
@@ -182,7 +193,7 @@ class IADAL_Members_Controller {
 			$data['photo_attachment_id'] = $photo_id;
 		}
 
-		$documents = $this->collect_protected_documents();
+		$documents = $this->collect_protected_documents( (int) $data['church_id'] );
 
 		if ( is_wp_error( $documents ) ) {
 			$errors[] = $documents->get_error_message();
@@ -201,9 +212,12 @@ class IADAL_Members_Controller {
 			);
 		}
 
+		IADAL_Database::begin_transaction();
+
 		$member_id = $this->repository->create( $data );
 
 		if ( ! $member_id ) {
+			IADAL_Database::rollback();
 			$this->cleanup_uploaded_files( $documents );
 			$this->cleanup_attachment( $photo_id );
 			$this->redirect(
@@ -217,9 +231,9 @@ class IADAL_Members_Controller {
 		$documents_saved = $this->save_documents( $member_id, $documents );
 
 		if ( is_wp_error( $documents_saved ) ) {
+			IADAL_Database::rollback();
 			$this->cleanup_uploaded_files( $documents );
 			$this->cleanup_attachment( $photo_id );
-			$this->repository->delete( (int) $member_id );
 			$this->redirect(
 				'iadal-members-create',
 				array(
@@ -227,6 +241,10 @@ class IADAL_Members_Controller {
 				)
 			);
 		}
+
+		IADAL_Database::commit();
+
+		IADAL_Audit::log( 'members', 'create', 'member', (int) $member_id, null, $data, (int) $data['church_id'] );
 
 		$this->redirect(
 			'iadal-members',
@@ -251,6 +269,10 @@ class IADAL_Members_Controller {
 
 		if ( ! $existing ) {
 			wp_die( esc_html__( 'Membro nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		if ( ! $this->can_access_church( (int) ( $existing['church_id'] ?? 0 ) ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para alterar este membro.', 'iadal-gestao-ministerial' ) );
 		}
 
 		$data   = $this->sanitize_member_data();
@@ -278,7 +300,7 @@ class IADAL_Members_Controller {
 			$data['photo_attachment_id'] = $photo_id;
 		}
 
-		$documents = $this->collect_protected_documents();
+		$documents = $this->collect_protected_documents( (int) $data['church_id'] );
 
 		if ( is_wp_error( $documents ) ) {
 			$errors[] = $documents->get_error_message();
@@ -298,9 +320,12 @@ class IADAL_Members_Controller {
 			);
 		}
 
+		IADAL_Database::begin_transaction();
+
 		$updated = $this->repository->update( $member_id, $data );
 
 		if ( ! $updated ) {
+			IADAL_Database::rollback();
 			$this->cleanup_uploaded_files( $documents );
 			$this->cleanup_attachment( $photo_id );
 			$this->redirect(
@@ -315,7 +340,9 @@ class IADAL_Members_Controller {
 		$documents_saved = $this->save_documents( $member_id, $documents );
 
 		if ( is_wp_error( $documents_saved ) ) {
+			IADAL_Database::rollback();
 			$this->cleanup_uploaded_files( $documents );
+			$this->cleanup_attachment( $photo_id );
 			$this->redirect(
 				'iadal-members-edit',
 				array(
@@ -324,6 +351,10 @@ class IADAL_Members_Controller {
 				)
 			);
 		}
+
+		IADAL_Database::commit();
+
+		IADAL_Audit::log( 'members', 'update', 'member', $member_id, $existing, $data, (int) $data['church_id'] );
 
 		$this->redirect(
 			'iadal-members',
@@ -344,6 +375,12 @@ class IADAL_Members_Controller {
 		$member_id = $this->get_int_from_post( 'member_id', 0 );
 		$this->verify_nonce( 'iadal_members_delete_' . $member_id, 'iadal_members_nonce' );
 
+		$member = $this->repository->find( $member_id );
+
+		if ( ! $member || ! $this->can_access_church( (int) ( $member['church_id'] ?? 0 ) ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para excluir este membro.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$deleted = $this->repository->delete( $member_id );
 
 		if ( ! $deleted ) {
@@ -354,6 +391,8 @@ class IADAL_Members_Controller {
 				)
 			);
 		}
+
+		IADAL_Audit::log( 'members', 'delete', 'member', $member_id, $member, array( 'deleted' => true ), (int) ( $member['church_id'] ?? 0 ) );
 
 		$this->redirect(
 			'iadal-members',
@@ -384,6 +423,16 @@ class IADAL_Members_Controller {
 			wp_die( esc_html__( 'Documento nao encontrado.', 'iadal-gestao-ministerial' ) );
 		}
 
+		$member = $this->repository->find( (int) ( $document['member_id'] ?? 0 ) );
+
+		if ( ! $member ) {
+			wp_die( esc_html__( 'Membro do documento nao encontrado.', 'iadal-gestao-ministerial' ) );
+		}
+
+		if ( (int) ( $document['church_id'] ?? 0 ) !== (int) ( $member['church_id'] ?? 0 ) || ! $this->can_access_church( (int) ( $document['church_id'] ?? 0 ) ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar este documento.', 'iadal-gestao-ministerial' ) );
+		}
+
 		$file_path      = (string) $document['file_path'];
 		$protected_root = realpath( $this->protected_upload_root() );
 		$real_file      = realpath( $file_path );
@@ -396,6 +445,7 @@ class IADAL_Members_Controller {
 		header( 'Content-Type: ' . (string) $document['mime_type'] );
 		header( 'Content-Length: ' . (string) filesize( $real_file ) );
 		header( 'Content-Disposition: attachment; filename="' . basename( (string) $document['file_name'] ) . '"' );
+		IADAL_Audit::log( 'members', 'download_document', 'member_document', $document_id, null, array( 'file_name' => (string) $document['file_name'] ), (int) ( $document['church_id'] ?? 0 ) );
 		readfile( $real_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
 		exit;
 	}
@@ -476,6 +526,62 @@ class IADAL_Members_Controller {
 	}
 
 	/**
+	 * Checks if the current user can access one church scope.
+	 *
+	 * @param int $church_id Church ID.
+	 * @return bool
+	 */
+	private function can_access_church( int $church_id ): bool {
+		if ( $church_id <= 0 ) {
+			return false;
+		}
+
+		if ( current_user_can( 'iadal_manage_members' ) || current_user_can( 'iadal_view_congregations' ) ) {
+			return $this->church_exists( $church_id );
+		}
+
+		// Future plugin-auth users should be checked here against their church_id.
+		return false;
+	}
+
+	/**
+	 * Checks if a congregation exists.
+	 *
+	 * @param int $church_id Church ID.
+	 * @return bool
+	 */
+	private function church_exists( int $church_id ): bool {
+		$congregations = $this->get_congregations_for_select();
+
+		foreach ( $congregations as $congregation ) {
+			if ( (int) $congregation['id'] === $church_id ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Gets congregations for member forms and filters.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function get_congregations_for_select(): array {
+		if ( ! class_exists( 'IADAL_Congregations_Repository' ) ) {
+			return array();
+		}
+
+		$repository = new IADAL_Congregations_Repository();
+
+		return $repository->all(
+			array(
+				'limit' => 500,
+			)
+		);
+	}
+
+	/**
 	 * Verifies a nonce field.
 	 *
 	 * @param string $action Nonce action.
@@ -500,6 +606,7 @@ class IADAL_Members_Controller {
 		$status      = filter_input( INPUT_GET, 'status', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$entry_type  = filter_input( INPUT_GET, 'entry_type', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$birth_month = filter_input( INPUT_GET, 'birth_month', FILTER_SANITIZE_NUMBER_INT );
+		$church_id   = filter_input( INPUT_GET, 'church_id', FILTER_SANITIZE_NUMBER_INT );
 
 		$status_options     = array_keys( self::status_options() );
 		$entry_type_options = array_keys( self::entry_type_options() );
@@ -513,11 +620,14 @@ class IADAL_Members_Controller {
 			$birth_month = '';
 		}
 
+		$church_id = null !== $church_id && false !== $church_id ? max( 0, (int) $church_id ) : 0;
+
 		return array(
 			'search'      => sanitize_text_field( (string) $search ),
 			'status'      => $status,
 			'entry_type'  => $entry_type,
 			'birth_month' => $birth_month,
+			'church_id'   => $church_id,
 		);
 	}
 
@@ -546,6 +656,7 @@ class IADAL_Members_Controller {
 		}
 
 		return array(
+			'church_id'       => isset( $post['church_id'] ) ? max( 0, (int) $post['church_id'] ) : 0,
 			'full_name'      => isset( $post['full_name'] ) ? sanitize_text_field( $post['full_name'] ) : '',
 			'cpf'            => $this->digits_only( isset( $post['cpf'] ) ? (string) $post['cpf'] : '' ),
 			'phone'          => isset( $post['phone'] ) ? sanitize_text_field( $post['phone'] ) : '',
@@ -580,6 +691,10 @@ class IADAL_Members_Controller {
 			$errors[] = __( 'Informe o nome completo.', 'iadal-gestao-ministerial' );
 		}
 
+		if ( empty( $data['church_id'] ) || ! $this->can_access_church( (int) $data['church_id'] ) ) {
+			$errors[] = __( 'Selecione uma congregacao valida.', 'iadal-gestao-ministerial' );
+		}
+
 		if ( '' === $data['cpf'] ) {
 			$errors[] = __( 'Informe o CPF.', 'iadal-gestao-ministerial' );
 		} elseif ( 11 !== strlen( $data['cpf'] ) ) {
@@ -596,6 +711,33 @@ class IADAL_Members_Controller {
 			$errors[] = __( 'Informe uma data de nascimento valida.', 'iadal-gestao-ministerial' );
 		}
 
+		$max_lengths = array(
+			'full_name'          => 190,
+			'phone'              => 30,
+			'email'              => 190,
+			'gender'             => 20,
+			'zip_code'           => 20,
+			'address'            => 255,
+			'address_number'     => 30,
+			'address_complement' => 120,
+			'district'           => 120,
+			'city'               => 120,
+			'state'              => 2,
+			'marital_status'     => 40,
+			'spouse_name'        => 190,
+		);
+
+		foreach ( $max_lengths as $field => $max_length ) {
+			if ( isset( $data[ $field ] ) && strlen( (string) $data[ $field ] ) > $max_length ) {
+				$errors[] = sprintf(
+					/* translators: 1: field name, 2: max length. */
+					__( 'O campo %1$s deve ter no maximo %2$d caracteres.', 'iadal-gestao-ministerial' ),
+					$field,
+					$max_length
+				);
+			}
+		}
+
 		return $errors;
 	}
 
@@ -606,6 +748,11 @@ class IADAL_Members_Controller {
 	 */
 	private function handle_photo_upload() {
 		$field_name = 'photo';
+		$upload_error = $this->get_upload_error( $field_name );
+
+		if ( is_wp_error( $upload_error ) ) {
+			return $upload_error;
+		}
 
 		if ( ! $this->has_uploaded_file( $field_name ) ) {
 			return 0;
@@ -655,9 +802,10 @@ class IADAL_Members_Controller {
 	/**
 	 * Collects protected document uploads for later database linking.
 	 *
+	 * @param int $church_id Church ID.
 	 * @return array<int, array<string, mixed>>|WP_Error
 	 */
-	private function collect_protected_documents() {
+	private function collect_protected_documents( int $church_id ) {
 		$documents = array();
 		$fields    = array(
 			'change_letter'       => __( 'Carta de mudanca', 'iadal-gestao-ministerial' ),
@@ -665,6 +813,13 @@ class IADAL_Members_Controller {
 		);
 
 		foreach ( $fields as $field_name => $title ) {
+			$upload_error = $this->get_upload_error( $field_name );
+
+			if ( is_wp_error( $upload_error ) ) {
+				$this->cleanup_uploaded_files( $documents );
+				return $upload_error;
+			}
+
 			if ( ! $this->has_uploaded_file( $field_name ) ) {
 				continue;
 			}
@@ -676,7 +831,8 @@ class IADAL_Members_Controller {
 				return $document;
 			}
 
-			$documents[] = $document;
+			$document['church_id'] = $church_id;
+			$documents[]           = $document;
 		}
 
 		return $documents;
@@ -889,7 +1045,42 @@ class IADAL_Members_Controller {
 	private function has_uploaded_file( string $field_name ): bool {
 		return isset( $_FILES[ $field_name ]['name'], $_FILES[ $field_name ]['tmp_name'] )
 			&& '' !== $_FILES[ $field_name ]['name']
+			&& isset( $_FILES[ $field_name ]['error'] )
+			&& UPLOAD_ERR_OK === (int) $_FILES[ $field_name ]['error']
 			&& is_uploaded_file( (string) $_FILES[ $field_name ]['tmp_name'] );
+	}
+
+	/**
+	 * Converts PHP upload errors into user-facing errors.
+	 *
+	 * @param string $field_name Upload field name.
+	 * @return true|WP_Error
+	 */
+	private function get_upload_error( string $field_name ) {
+		if ( ! isset( $_FILES[ $field_name ]['error'] ) ) {
+			return true;
+		}
+
+		$error = (int) $_FILES[ $field_name ]['error'];
+
+		if ( UPLOAD_ERR_NO_FILE === $error ) {
+			return true;
+		}
+
+		if ( UPLOAD_ERR_OK === $error ) {
+			return true;
+		}
+
+		$messages = array(
+			UPLOAD_ERR_INI_SIZE   => __( 'O arquivo enviado excede o limite permitido pelo servidor.', 'iadal-gestao-ministerial' ),
+			UPLOAD_ERR_FORM_SIZE  => __( 'O arquivo enviado excede o limite permitido pelo formulario.', 'iadal-gestao-ministerial' ),
+			UPLOAD_ERR_PARTIAL    => __( 'O arquivo foi enviado parcialmente. Tente novamente.', 'iadal-gestao-ministerial' ),
+			UPLOAD_ERR_NO_TMP_DIR => __( 'O diretorio temporario de upload nao esta disponivel.', 'iadal-gestao-ministerial' ),
+			UPLOAD_ERR_CANT_WRITE => __( 'Nao foi possivel gravar o arquivo enviado.', 'iadal-gestao-ministerial' ),
+			UPLOAD_ERR_EXTENSION  => __( 'Uma extensao do servidor bloqueou o upload.', 'iadal-gestao-ministerial' ),
+		);
+
+		return new WP_Error( 'iadal_upload_error', $messages[ $error ] ?? __( 'Nao foi possivel concluir o upload.', 'iadal-gestao-ministerial' ) );
 	}
 
 	/**
@@ -898,7 +1089,10 @@ class IADAL_Members_Controller {
 	 * @return string
 	 */
 	private function protected_upload_root(): string {
-		return trailingslashit( WP_CONTENT_DIR ) . 'iadal-protected/member-documents';
+		$wordpress_root = untrailingslashit( ABSPATH );
+		$parent_root    = dirname( $wordpress_root );
+
+		return trailingslashit( $parent_root ) . 'iadal-protected/member-documents';
 	}
 
 	/**
@@ -914,6 +1108,7 @@ class IADAL_Members_Controller {
 
 		$htaccess = trailingslashit( $root ) . '.htaccess';
 		$index    = trailingslashit( $root ) . 'index.php';
+		$webconfig = trailingslashit( $root ) . 'web.config';
 
 		if ( ! file_exists( $htaccess ) ) {
 			file_put_contents( $htaccess, "Deny from all\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
@@ -921,6 +1116,10 @@ class IADAL_Members_Controller {
 
 		if ( ! file_exists( $index ) ) {
 			file_put_contents( $index, "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		}
+
+		if ( ! file_exists( $webconfig ) ) {
+			file_put_contents( $webconfig, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration><system.webServer><authorization><deny users=\"*\" /></authorization></system.webServer></configuration>\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
 	}
 

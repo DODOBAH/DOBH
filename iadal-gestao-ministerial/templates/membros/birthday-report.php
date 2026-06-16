@@ -32,6 +32,18 @@ $total_pages = max( 1, (int) ceil( $total / $per_page ) );
 				</select>
 			</label>
 
+			<label>
+				<span><?php esc_html_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?></span>
+				<select name="church_id">
+					<option value="0"><?php esc_html_e( 'Todas', 'iadal-gestao-ministerial' ); ?></option>
+					<?php foreach ( $congregations as $congregation ) : ?>
+						<option value="<?php echo esc_attr( (string) $congregation['id'] ); ?>" <?php selected( (int) $church_id, (int) $congregation['id'] ); ?>>
+							<?php echo esc_html( $congregation['name'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+
 			<div class="iadal-filter-actions">
 				<button type="submit" class="button button-primary">
 					<?php esc_html_e( 'Gerar relatorio', 'iadal-gestao-ministerial' ); ?>

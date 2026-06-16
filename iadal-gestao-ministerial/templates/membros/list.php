@@ -13,6 +13,11 @@ $status_options     = IADAL_Members_Controller::status_options();
 $entry_type_options = IADAL_Members_Controller::entry_type_options();
 $total_pages        = max( 1, (int) ceil( $total / $per_page ) );
 $base_url           = admin_url( 'admin.php?page=iadal-members' );
+$congregation_names = array();
+
+foreach ( $congregations as $congregation ) {
+	$congregation_names[ (int) $congregation['id'] ] = (string) $congregation['name'];
+}
 ?>
 
 <div class="wrap iadal-members-wrap">
@@ -76,6 +81,18 @@ $base_url           = admin_url( 'admin.php?page=iadal-members' );
 				</select>
 			</label>
 
+			<label>
+				<span><?php esc_html_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?></span>
+				<select name="church_id">
+					<option value="0"><?php esc_html_e( 'Todas', 'iadal-gestao-ministerial' ); ?></option>
+					<?php foreach ( $congregations as $congregation ) : ?>
+						<option value="<?php echo esc_attr( (string) $congregation['id'] ); ?>" <?php selected( (int) $filters['church_id'], (int) $congregation['id'] ); ?>>
+							<?php echo esc_html( $congregation['name'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+
 			<div class="iadal-filter-actions">
 				<button type="submit" class="button button-primary">
 					<?php esc_html_e( 'Filtrar', 'iadal-gestao-ministerial' ); ?>
@@ -107,6 +124,7 @@ $base_url           = admin_url( 'admin.php?page=iadal-members' );
 					<th><?php esc_html_e( 'Nome', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'CPF', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Telefone', 'iadal-gestao-ministerial' ); ?></th>
+					<th><?php esc_html_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Nascimento', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Entrada', 'iadal-gestao-ministerial' ); ?></th>
 					<th><?php esc_html_e( 'Status', 'iadal-gestao-ministerial' ); ?></th>
@@ -116,7 +134,7 @@ $base_url           = admin_url( 'admin.php?page=iadal-members' );
 			<tbody>
 				<?php if ( empty( $members ) ) : ?>
 					<tr>
-						<td colspan="8"><?php esc_html_e( 'Nenhum membro encontrado.', 'iadal-gestao-ministerial' ); ?></td>
+						<td colspan="9"><?php esc_html_e( 'Nenhum membro encontrado.', 'iadal-gestao-ministerial' ); ?></td>
 					</tr>
 				<?php endif; ?>
 
@@ -150,6 +168,9 @@ $base_url           = admin_url( 'admin.php?page=iadal-members' );
 						</td>
 						<td data-label="<?php esc_attr_e( 'Telefone', 'iadal-gestao-ministerial' ); ?>">
 							<?php echo esc_html( $member['phone'] ?: '-' ); ?>
+						</td>
+						<td data-label="<?php esc_attr_e( 'Congregacao', 'iadal-gestao-ministerial' ); ?>">
+							<?php echo esc_html( $congregation_names[ (int) $member['church_id'] ] ?? '-' ); ?>
 						</td>
 						<td data-label="<?php esc_attr_e( 'Nascimento', 'iadal-gestao-ministerial' ); ?>">
 							<?php echo esc_html( IADAL_Members_Controller::format_date( $member['birth_date'] ) ); ?>

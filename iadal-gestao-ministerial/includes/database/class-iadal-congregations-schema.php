@@ -24,6 +24,7 @@ class IADAL_Congregations_Schema {
 
 		$churches_table  = IADAL_Database::table( 'churches' );
 		$users_table     = IADAL_Database::table( 'users' );
+		$modules_table   = IADAL_Database::table( 'church_modules' );
 		$charset_collate = $wpdb->get_charset_collate();
 
 		$sql = "CREATE TABLE {$churches_table} (
@@ -66,7 +67,7 @@ class IADAL_Congregations_Schema {
 			name varchar(190) NOT NULL,
 			login varchar(120) NOT NULL,
 			password_hash varchar(255) NOT NULL,
-			initial_password_hash varchar(255) DEFAULT NULL,
+			password_generated_at datetime DEFAULT NULL,
 			role varchar(60) NOT NULL,
 			church_id bigint(20) unsigned DEFAULT NULL,
 			department_id bigint(20) unsigned DEFAULT NULL,
@@ -75,6 +76,8 @@ class IADAL_Congregations_Schema {
 			phone varchar(30) DEFAULT NULL,
 			status varchar(20) NOT NULL DEFAULT 'ativo',
 			must_change_password tinyint(1) unsigned NOT NULL DEFAULT 1,
+			blocked_by_church_status tinyint(1) unsigned NOT NULL DEFAULT 0,
+			status_before_church_block varchar(20) DEFAULT NULL,
 			failed_login_attempts int(10) unsigned NOT NULL DEFAULT 0,
 			locked_until datetime DEFAULT NULL,
 			last_login_at datetime DEFAULT NULL,
@@ -91,6 +94,22 @@ class IADAL_Congregations_Schema {
 			KEY church_id (church_id),
 			KEY status (status),
 			KEY deleted_at (deleted_at)
+		) {$charset_collate};";
+
+		$sql .= "\nCREATE TABLE {$modules_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			church_id bigint(20) unsigned NOT NULL,
+			module_key varchar(80) NOT NULL,
+			module_name varchar(120) NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'disponivel',
+			created_by bigint(20) unsigned DEFAULT NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY church_module (church_id, module_key),
+			KEY church_id (church_id),
+			KEY module_key (module_key),
+			KEY status (status)
 		) {$charset_collate};";
 
 		return IADAL_Database::run_schema( $sql );
